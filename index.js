@@ -1,4 +1,4 @@
-import {
+const {
   Client,
   GatewayIntentBits,
   ActionRowBuilder,
@@ -8,9 +8,9 @@ import {
   REST,
   Routes,
   SlashCommandBuilder
-} from "discord.js";
+} = require("discord.js");
 
-import express from "express";
+const express = require("express");
 
 // 🌐 KEEP ALIVE
 const app = express();
@@ -29,10 +29,8 @@ const CARGO_EM = "1492553421973356795";
 const CARGO_FORA = "1492553631642288160";
 const CARGO_ADV = "1477683902041690350";
 
-const TEMPO_MAXIMO = 7 * 60 * 60 * 1000;
-
 // 🧠 SISTEMA
-let config = { painel: null, logs: null, msgId: null };
+let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
@@ -43,7 +41,7 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 📌 COMANDOS COMPLETOS
+// 📌 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
@@ -55,7 +53,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("🏆 Ver ranking de plantão"),
+    .setDescription("🏆 Ver ranking"),
 
   new SlashCommandBuilder()
     .setName("resetponto")
@@ -91,6 +89,8 @@ client.once("ready", async () => {
     { body: commands }
   );
 
+  console.log("✅ Slash commands registrados");
+
   setInterval(atualizarPainel, 30000);
 });
 
@@ -106,7 +106,7 @@ function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
-// 🏥 PAINEL BONITO
+// 🏥 PAINEL
 async function atualizarPainel() {
   if (!config.painel || !config.msgId) return;
 
@@ -118,52 +118,31 @@ async function atualizarPainel() {
 
   let lista = "";
 
-  let chefe = null;
-  let maior = 0;
-
   for (const [id, data] of pontos) {
     const tempo = Date.now() - data.inicio;
-
-    if (tempo > maior) {
-      maior = tempo;
-      chefe = id;
-    }
-
     lista += `👨‍⚕️ <@${id}> • ${formatar(tempo)}\n`;
   }
-
-  const status =
-    pontos.size >= 3 ? "🟢 NORMAL" :
-    pontos.size >= 1 ? "🟡 BAIXO" :
-    "🔴 CRÍTICO";
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
     .setTitle("🏥 HOSPITAL BELLA")
     .setDescription(
-`╭━━━━━━━━━━━━━━━╮
+`╭━━━━━━━━━━━━━━╮
 🏥 SISTEMA DE PLANTÃO
-╰━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━╯
 
-👑 RESPONSÁVEL DO PLANTÃO
-${chefe ? `<@${chefe}> • ${formatar(maior)}` : "Nenhum"}
-
-👨‍⚕️ MÉDICOS EM SERVIÇO
+👨‍⚕️ EM SERVIÇO
 ${lista || "Nenhum médico online"}
 
 📊 STATUS
 👥 Ativos: ${pontos.size}
-🚨 Situação: ${status}
-⏱️ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
-
-💙 Hospital Bella System`
-    )
-    .setTimestamp();
+⏱️ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>`
+    );
 
   await msg.edit({ embeds: [embed] }).catch(() => {});
 }
 
-// 🚀 INTERAÇÕES
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   try {
 
@@ -188,7 +167,7 @@ client.on("interactionCreate", async (interaction) => {
       if (interaction.commandName === "painelhp") {
 
         config.painel = interaction.options.getChannel("canal").id;
-        config.logs = interaction.options.getChannel("logs").id;
+        config.msgId = null;
 
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -203,23 +182,26 @@ client.on("interactionCreate", async (interaction) => {
         );
 
         const msg = await interaction.channel.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("🏥 Painel Hospital")
-              .setDescription("Use os botões abaixo")
-          ],
+          content: "🏥 Painel Hospital ativo",
           components: [row]
         });
 
         config.msgId = msg.id;
 
-        return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
+        return interaction.reply({
+          content: "✅ Painel criado!",
+          ephemeral: true
+        });
       }
 
       if (interaction.commandName === "resetponto") {
         pontos.clear();
         ranking.clear();
-        return interaction.reply({ content: "🔄 Resetado!", ephemeral: true });
+
+        return interaction.reply({
+          content: "🔄 Sistema resetado!",
+          ephemeral: true
+        });
       }
 
       if (interaction.commandName === "rankinghp") {
@@ -233,7 +215,8 @@ client.on("interactionCreate", async (interaction) => {
             new EmbedBuilder()
               .setTitle("🏆 Ranking")
               .setDescription(lista || "Sem dados")
-          ]
+          ],
+          ephemeral: true
         });
       }
 
@@ -242,7 +225,7 @@ client.on("interactionCreate", async (interaction) => {
         const h = interaction.options.getInteger("horas");
         const m = interaction.options.getInteger("minutos") || 0;
 
-        const ms = (h*60+m)*60000;
+        const ms = (h*60 + m) * 60000;
         ranking.set(u.id, (ranking.get(u.id)||0)+ms);
 
         return interaction.reply({ content: "➕ Adicionado", ephemeral: true });
@@ -253,7 +236,7 @@ client.on("interactionCreate", async (interaction) => {
         const h = interaction.options.getInteger("horas");
         const m = interaction.options.getInteger("minutos") || 0;
 
-        const ms = (h*60+m)*60000;
+        const ms = (h*60 + m) * 60000;
         ranking.set(u.id, Math.max(0,(ranking.get(u.id)||0)-ms));
 
         return interaction.reply({ content: "➖ Removido", ephemeral: true });
