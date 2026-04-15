@@ -1,6 +1,6 @@
-require("dotenv").config();
-
-const {
+import "dotenv/config";
+import express from "express";
+import {
   Client,
   GatewayIntentBits,
   ActionRowBuilder,
@@ -10,9 +10,7 @@ const {
   REST,
   Routes,
   SlashCommandBuilder
-} = require("discord.js");
-
-const express = require("express");
+} from "discord.js";
 
 // 🌐 KEEP ALIVE
 const app = express();
@@ -25,7 +23,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.log("❌ Faltando TOKEN, CLIENT_ID ou GUILD_ID");
+  console.log("❌ Faltando TOKEN / CLIENT_ID / GUILD_ID");
   process.exit(1);
 }
 
@@ -33,7 +31,6 @@ if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
 const STAFF = "1490431614055088128";
 const CARGO_EM = "1492553421973356795";
 const CARGO_FORA = "1492553631642288160";
-const CARGO_ADV = "1477683902041690350";
 
 // 👑 HIERARQUIA
 const HIERARQUIA = [
@@ -42,8 +39,6 @@ const HIERARQUIA = [
   { id: "1477683902121509016", nome: "Supervisor" },
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
-
-const TEMPO_MAXIMO = 7 * 60 * 60 * 1000;
 
 // 🧠 SISTEMA
 let config = { painel: null, msgId: null };
@@ -57,41 +52,10 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 📌 COMANDOS COMPLETOS
+// 📌 COMANDOS
 const commands = [
-
-  new SlashCommandBuilder()
-    .setName("painelhp")
-    .setDescription("Criar painel hospital"),
-
-  new SlashCommandBuilder()
-    .setName("rankinghp")
-    .setDescription("Ver ranking"),
-
-  new SlashCommandBuilder()
-    .setName("resetponto")
-    .setDescription("Resetar sistema"),
-
-  new SlashCommandBuilder()
-    .setName("addhora")
-    .setDescription("Adicionar horas")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName("removerhora")
-    .setDescription("Remover horas")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(false))
-
+  new SlashCommandBuilder().setName("painelhp").setDescription("Criar painel"),
+  new SlashCommandBuilder().setName("rankinghp").setDescription("Ver ranking")
 ].map(c => c.toJSON());
 
 // 🔥 READY
@@ -103,45 +67,43 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(atualizarPainel, 30000);
+  setInterval(updatePanel, 30000);
 });
 
 // ⏱ FORMATAR
-function formatar(ms) {
+function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
 
 // 👑 HIERARQUIA RESPONSÁVEL
-function getResponsavel(guild) {
-  for (const c of HIERARQUIA) {
-    const role = guild.roles.cache.get(c.id);
+function getBoss(guild) {
+  for (const roleData of HIERARQUIA) {
+    const role = guild.roles.cache.get(roleData.id);
     if (role && role.members.size > 0) {
-      const m = role.members.first();
-      return `<@${m.id}> • ${c.nome}`;
+      const user = role.members.first();
+      return `<@${user.id}> • ${roleData.nome}`;
     }
   }
   return "Nenhum";
 }
 
-// 🏥 PAINEL BONITO
-async function atualizarPainel() {
+// 🏥 PAINEL
+async function updatePanel() {
   if (!config.painel || !config.msgId) return;
 
-  const canal = await client.channels.fetch(config.painel).catch(() => null);
-  if (!canal) return;
+  const channel = await client.channels.fetch(config.painel).catch(() => null);
+  if (!channel) return;
 
-  const msg = await canal.messages.fetch(config.msgId).catch(() => null);
+  const msg = await channel.messages.fetch(config.msgId).catch(() => null);
   if (!msg) return;
 
-  let lista = "";
-  let maior = 0;
+  let list = "";
 
-  for (const [id, d] of pontos) {
-    const t = Date.now() - d.inicio;
-    if (t > maior) maior = t;
-    lista += `┆ 👨‍⚕️ <@${id}> • ${formatar(t)}\n`;
+  for (const [id, data] of pontos) {
+    const time = Date.now() - data.inicio;
+    list += `┆ 👨‍⚕️ <@${id}> • ${format(time)}\n`;
   }
 
   const embed = new EmbedBuilder()
@@ -150,25 +112,19 @@ async function atualizarPainel() {
 `🏥 ═══════〔 HOSPITAL BELLA 〕═══════
 
 👑 RESPONSÁVEL DO PLANTÃO
-${getResponsavel(canal.guild)}
+${getBoss(channel.guild)}
 
 👨‍⚕️ MÉDICOS EM SERVIÇO
-${lista || "- Nenhum"}
+${list || "- Nenhum"}
 
 📊 STATUS
 ┆ Ativos: ${pontos.size}
 ┆ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
 
-🔥 Sistema Hospitalar Premium`
+🔥 Sistema Premium`
     );
 
   msg.edit({ embeds: [embed] });
-}
-
-// 🎯 PROTEÇÃO STAFF
-async function isStaff(interaction) {
-  const m = await interaction.guild.members.fetch(interaction.user.id);
-  return m.roles.cache.has(STAFF);
 }
 
 // 🎯 INTERAÇÕES
@@ -176,79 +132,54 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
 
-  if (!(await isStaff(interaction))) {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+
+  if (!member.roles.cache.has(STAFF)) {
     return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
   }
 
-  // 🏥 PAINEL
   if (interaction.commandName === "painelhp") {
-    const canal = interaction.channel;
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId("iniciar")
+        .setLabel("🟢 Iniciar")
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId("finalizar")
+        .setLabel("🔴 Finalizar")
+        .setStyle(ButtonStyle.Danger)
     );
 
-    const msg = await canal.send({
+    const msg = await interaction.channel.send({
       embeds: [
         new EmbedBuilder()
-          .setColor("#0f172a")
           .setDescription("🏥 Painel Hospital ativo")
+          .setColor("#0f172a")
       ],
       components: [row]
     });
 
-    config.painel = canal.id;
+    config.painel = interaction.channel.id;
     config.msgId = msg.id;
 
     return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
-  // 🏆 RANKING
   if (interaction.commandName === "rankinghp") {
-    const lista = [...ranking.entries()]
+    const top = [...ranking.entries()]
       .sort((a, b) => b[1] - a[1])
-      .map(([id, t]) => `<@${id}> • ${formatar(t)}`)
+      .map(([id, t]) => `<@${id}> • ${format(t)}`)
       .join("\n");
 
     return interaction.reply({
       embeds: [
         new EmbedBuilder()
           .setTitle("🏆 Ranking")
-          .setDescription(lista || "Sem dados")
+          .setDescription(top || "Sem dados")
       ]
     });
-  }
-
-  // 🔄 RESET
-  if (interaction.commandName === "resetponto") {
-    pontos.clear();
-    ranking.clear();
-    return interaction.reply("✅ Resetado!");
-  }
-
-  // ➕ ADD HORA
-  if (interaction.commandName === "addhora") {
-    const u = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas");
-    const m = interaction.options.getInteger("minutos") || 0;
-
-    const ms = (h * 60 + m) * 60000;
-    ranking.set(u.id, (ranking.get(u.id) || 0) + ms);
-
-    return interaction.reply({ content: `✅ ${u} atualizado`, ephemeral: true });
-  }
-
-  // ➖ REMOVER HORA
-  if (interaction.commandName === "removerhora") {
-    const u = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas");
-    const m = interaction.options.getInteger("minutos") || 0;
-
-    const ms = (h * 60 + m) * 60000;
-    ranking.set(u.id, Math.max(0, (ranking.get(u.id) || 0) - ms));
-
-    return interaction.reply({ content: `❌ ${u} atualizado`, ephemeral: true });
   }
 });
 
@@ -262,10 +193,6 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "iniciar") {
     pontos.set(id, { inicio: Date.now() });
-
-    await member.roles.add(CARGO_EM).catch(() => {});
-    await member.roles.remove(CARGO_FORA).catch(() => {});
-
     return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
   }
 
@@ -273,16 +200,13 @@ client.on("interactionCreate", async (interaction) => {
     const p = pontos.get(id);
     if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
 
-    const tempo = Date.now() - p.inicio;
+    const time = Date.now() - p.inicio;
+    ranking.set(id, (ranking.get(id) || 0) + time);
 
-    ranking.set(id, (ranking.get(id) || 0) + tempo);
     pontos.delete(id);
 
-    await member.roles.remove(CARGO_EM).catch(() => {});
-    await member.roles.add(CARGO_FORA).catch(() => {});
-
     return interaction.reply({
-      content: `🔴 Finalizado: ${formatar(tempo)}`,
+      content: `🔴 Finalizado: ${format(time)}`,
       ephemeral: true
     });
   }
