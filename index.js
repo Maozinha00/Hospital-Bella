@@ -39,7 +39,7 @@ const HIERARQUIA = [
 ];
 
 // 🧠 SISTEMA
-let config = { painel: null, msgId: null, logs: null };
+let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
@@ -50,7 +50,7 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 📌 COMANDOS
+// 📌 COMANDOS (GUILD - APARECE NA HORA)
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
@@ -89,6 +89,7 @@ const commands = [
 client.once("ready", async () => {
   console.log(`🔥 ${client.user.tag} online`);
 
+  // ⚠️ FIX PRINCIPAL: GUILD COMMANDS
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
@@ -106,13 +107,11 @@ function format(ms) {
 
 // 👑 RESPONSÁVEL POR HIERARQUIA
 function getBoss(guild) {
-  if (!guild) return "Nenhum";
-
   for (const roleData of HIERARQUIA) {
     const role = guild.roles.cache.get(roleData.id);
     if (role && role.members.size > 0) {
       const user = role.members.first();
-      if (user) return `<@${user.id}> • ${roleData.nome}`;
+      return `<@${user.id}> • ${roleData.nome}`;
     }
   }
   return "Nenhum";
@@ -120,24 +119,23 @@ function getBoss(guild) {
 
 // 🏥 PAINEL
 async function updatePanel() {
-  try {
-    if (!config.painel || !config.msgId) return;
+  if (!config.painel || !config.msgId) return;
 
-    const channel = await client.channels.fetch(config.painel).catch(() => null);
-    if (!channel) return;
+  const channel = await client.channels.fetch(config.painel).catch(() => null);
+  if (!channel) return;
 
-    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
-    if (!msg) return;
+  const msg = await channel.messages.fetch(config.msgId).catch(() => null);
+  if (!msg) return;
 
-    let list = "";
+  let list = "";
 
-    for (const [id, data] of pontos) {
-      list += `┆ 👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
-    }
+  for (const [id, data] of pontos) {
+    list += `┆ 👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
+  }
 
-    const embed = new EmbedBuilder()
-      .setColor("#0f172a")
-      .setDescription(
+  const embed = new EmbedBuilder()
+    .setColor("#0f172a")
+    .setDescription(
 `🏥 ═══════〔 HOSPITAL BELLA 〕═══════
 
 👑 RESPONSÁVEL DO PLANTÃO
@@ -151,26 +149,18 @@ ${list || "Nenhum"}
 ┆ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
 
 🔥 Sistema Hospitalar`
-      );
+    );
 
-    await msg.edit({ embeds: [embed] });
-
-  } catch (e) {
-    console.log("Erro painel:", e.message);
-  }
+  await msg.edit({ embeds: [embed] }).catch(() => {});
 }
 
-// 🔐 CHECAR STAFF
+// 🔐 STAFF CHECK
 async function isStaff(interaction) {
-  try {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    return member.roles.cache.has(STAFF_ID);
-  } catch {
-    return false;
-  }
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  return member.roles.cache.has(STAFF_ID);
 }
 
-// 🎯 COMANDOS
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -181,7 +171,6 @@ client.on("interactionCreate", async (interaction) => {
   // PAINEL
   if (interaction.commandName === "painelhp") {
     config.painel = interaction.options.getChannel("canal").id;
-    config.logs = interaction.options.getChannel("logs").id;
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
@@ -195,7 +184,7 @@ client.on("interactionCreate", async (interaction) => {
 
     config.msgId = msg.id;
 
-    return interaction.reply({ content: "✅ Criado!", ephemeral: true });
+    return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
   // RANKING
