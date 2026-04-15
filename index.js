@@ -7,601 +7,277 @@ import {
   EmbedBuilder,
   REST,
   Routes,
-  SlashCommandBuilder,
-  PermissionFlagsBits
+  SlashCommandBuilder
 } from "discord.js";
 
 import express from "express";
 
-// ═══════════════════════════════════════════
-// & CONFIGURAÇÕES
-// ═══════════════════════════════════════════
-
-const CONFIG = {
-  TOKEN: process.env.TOKEN,
-  PORT: process.env.PORT || 3000,
-  
-  // IDs do Servidor
-  GUILD_ID: process.env.GUILD_ID || "1477683902041690342",
-  STAFF_ROLE_ID: process.env.STAFF_ROLE_ID || "1490431614055088128",
-  
-  // IDs dos Cargos
-  ROLE_EM_SERVICO: process.env.ROLE_EM_SERVICO || "1492553421973356795",
-  ROLE_FORA_SERVICO: process.env.ROLE_FORA_SERVICO || "1492553631642288160",
-  ROLE_ADVERTENCIA: process.env.ROLE_ADVERTENCIA || "1477683902041690350",
-  
-  // Tempo máximo de plantão (7 horas em milissegundos)
-  TEMPO_MAXIMO_PLANTAO: 7 * 60 * 60 * 1000,
-  
-  // Intervalos de atualização (em milissegundos)
-  INTERVALO_ATUALIZACAO_PAINEL: 30000,
-  INTERVALO_VERIFICACAO_TEMPO: 60000,
-};
-
-// ═══════════════════════════════════════════
-// 🌐 SERVIDOR WEB (Railway)
-// ═══════════════════════════════════════════
-
+// 🌐 KEEP ONLINE
 const app = express();
+app.get("/", (req, res) => res.send("Bot online 🔥"));
+app.listen(3000);
 
-// Health check para Railway
-app.get("/", (req, res) => {
-  res.json({ 
-    status: "online", 
-    message: "Bot Hospital Bella está funcionando! 🔥",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+// 🔐 TOKEN
+const TOKEN = process.env.TOKEN;
+if (!TOKEN) process.exit(1);
+
+// ⚙️ CONFIG
+const TEMPO_MAXIMO = 7 * 60 * 60 * 1000; // 7h
+const CARGO_ADV = "1477683902041690350";
+
+// 🧠 SISTEMA
+let config = { painel: null, logs: null, msgId: null };
+const pontos = new Map();
+const ranking = new Map();
+
+// 🚀 CLIENT
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
 });
 
-// Endpoint de saúde para Railway
-app.get("/health", (req, res) => {
-  res.status(200).json({ 
-    status: "healthy",
-    timestamp: new Date().toISOString()
-  });
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+// 📌 COMANDOS
+const commands = [
+  new SlashCommandBuilder()
+    .setName("painelhp")
+    .setDescription("Criar painel hospital")
+    .addChannelOption(o =>
+      o.setName("canal").setDescription("Canal do painel").setRequired(true))
+    .addChannelOption(o =>
+      o.setName("logs").setDescription("Canal de logs").setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName("rankinghp")
+    .setDescription("Ver ranking de plantão")
+].map(c => c.toJSON());
+
+// 🔥 READY
+client.once("ready", async () => {
+  console.log(`🔥 ${client.user.tag} online`);
+
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
+
+  setInterval(() => atualizarPainel().catch(() => {}), 30000);
+  setInterval(() => verificarTempo().catch(() => {}), 60000);
 });
 
-// Endpoint de prontidão
-app.get("/ready", (req, res) => {
-  res.status(200).json({ 
-    ready: true,
-    timestamp: new Date().toISOString()
-  });
-});
+// 💎 LOG
+async function sendLog(embed) {
+  try {
+    if (!config.logs) return;
 
-const server = app.listen(CONFIG.PORT, () => {
-  console.log(`🌐 Servidor web rodando na porta ${CONFIG.PORT}`);
-  console.log(`🔗 http://localhost:${CONFIG.PORT}`);
-});
+    const canal = await client.channels.fetch(config.logs).catch(() => null);
+    if (!canal || !canal.isTextBased()) return;
 
-// ═══════════════════════════════════════════
-// 🧠 SISTEMA DE DADOS
-// ═══════════════════════════════════════════
+    canal.send({ embeds: [embed] });
+  } catch {}
+}
 
-class SistemaHospital {
-  constructor() {
-    this.config = {
-      painelCanal: null,
-      logsCanal: null,
-      mensagemId: null
-    };
-    
-    this.pontosAtivos = new Map();
-    this.ranking = new Map();
-  }
+// 🧠 FORMATAR TEMPO
+function formatar(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
 
-  formatarTempo(ms) {
-    const horas = Math.floor(ms / 3600000);
-    const minutos = Math.floor((ms % 3600000) / 60000);
-    return `${horas}h ${minutos}m`;
-  }
+// 🧠 PAINEL BONITO
+async function atualizarPainel() {
+  try {
+    if (!config.painel || !config.msgId) return;
 
-  calcularTempoAtivo(dados) {
-    let tempo = Date.now() - dados.inicio - dados.pausa;
-    
-    if (dados.pausado) {
-      tempo -= (Date.now() - dados.pausaInicio);
-    }
-    
-    return Math.max(0, tempo);
-  }
+    const canal = await client.channels.fetch(config.painel).catch(() => null);
+    if (!canal) return;
 
-  obterChefePlantao() {
-    let chefeId = null;
+    const msg = await canal.messages.fetch(config.msgId).catch(() => null);
+    if (!msg) return;
+
+    let lista = "";
+    let chefe = null;
     let maiorTempo = 0;
 
-    for (const [id, dados] of this.pontosAtivos) {
-      const tempo = this.calcularTempoAtivo(dados);
-      
+    for (const [id, data] of pontos) {
+      const tempo = Date.now() - data.inicio;
+
       if (tempo > maiorTempo) {
         maiorTempo = tempo;
-        chefeId = id;
+        chefe = id;
       }
     }
 
-    return { id: chefeId, tempo: maiorTempo };
-  }
-
-  async atualizarPainel(client) {
-    if (!this.config.painelCanal || !this.config.mensagemId) {
-      return;
+    if (pontos.size === 0) {
+      lista = "- Nenhum médico em serviço";
+    } else {
+      for (const [id, data] of pontos) {
+        const tempo = Date.now() - data.inicio;
+        lista += `┆ 👨‍⚕️ <@${id}> • ${formatar(tempo)}\n`;
+      }
     }
 
-    try {
-      const canal = await client.channels.fetch(this.config.painelCanal);
-      const mensagem = await canal.messages.fetch(this.config.mensagemId);
+    let chefeInfo = "Nenhum";
+    if (chefe) {
+      chefeInfo = `<@${chefe}> • ${formatar(maiorTempo)}`;
+    }
 
-      const { id: chefeId, tempo: tempoChefe } = this.obterChefePlantao();
-      
-      let listaMedicos = "";
+    let status = "🔴 CRÍTICO";
+    if (pontos.size >= 3) status = "🟢 NORMAL";
+    else if (pontos.size >= 1) status = "🟡 BAIXO EFETIVO";
 
-      if (this.pontosAtivos.size === 0) {
-        listaMedicos = "├─ Nenhum médico em serviço no momento";
-      } else {
-        for (const [id, dados] of this.pontosAtivos) {
-          const tempo = this.calcularTempoAtivo(dados);
-          const status = dados.pausado ? "#" : "🟢";
-          listaMedicos += `├─ ${status} <@${id}> • ${this.formatarTempo(tempo)}\n`;
-        }
-      }
-
-      const chefeInfo = chefeId 
-        ? `<@${chefeId}> • ${this.formatarTempo(tempoChefe)}`
-        : "Nenhum";
-
-      const embed = new EmbedBuilder()
-        .setColor("#0f172a")
-        .setTitle("🏥 Hospital Bella - Sistema de Plantão")
-        .setDescription(
-`🏥 ═══════════════════════════
-╭━━━━━━━━━━━━━━━━━━━━━╮
+    const embed = new EmbedBuilder()
+      .setColor("#0f172a")
+      .setDescription(
+`🏥 ═══════〔 HOSPITAL BELLA 〕═══════
+╭━━━━━━━━━━━━━━━━━━━━╮
 ┃ 🏥 Sistema Hospitalar Ativo
-╰━━━━━━━━━━━━━━━━━━━━━╯
+╰━━━━━━━━━━━━━━━━━━━━╯
 
 👑 RESPONSÁVEL DO PLANTÃO
 ${chefeInfo}
 
-👨‍& MÉDICOS EM SERVIÇO
-${listaMedicos}
+👨‍⚕️ MÉDICOS EM SERVIÇO
+${lista}
 
 📊 STATUS
-├─ 👥 Ativos: ${this.pontosAtivos.size}
-└─ 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
+┆ 👥 Ativos: ${pontos.size}
+┆ 🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+
+🚨 SITUAÇÃO
+┆ ${status}
 
 Hospital Bella • Sistema de Ponto`
-        )
-        .setTimestamp()
-        .setFooter({ text: "Sistema de Gerenciamento Hospitalar" });
+      )
+      .setTimestamp();
 
-      await mensagem.edit({ embeds: [embed] });
-    } catch (error) {
-      console.error("❌ Erro ao atualizar painel:", error);
+    await msg.edit({ embeds: [embed] });
+
+  } catch {}
+}
+
+// 🚨 ADVERTÊNCIA
+async function verificarTempo() {
+  for (const [id, data] of pontos) {
+
+    const tempo = Date.now() - data.inicio;
+
+    if (tempo >= TEMPO_MAXIMO) {
+
+      const guild = client.guilds.cache.first();
+      if (!guild) continue;
+
+      const membro = await guild.members.fetch(id).catch(() => null);
+      if (!membro) continue;
+
+      await membro.roles.add(CARGO_ADV).catch(() => {});
+
+      pontos.delete(id);
+      atualizarPainel();
+
+      sendLog(new EmbedBuilder()
+        .setColor("#dc2626")
+        .setTitle("🚨 ADVERTÊNCIA AUTOMÁTICA")
+        .setDescription(`<@${id}> passou de 7h em serviço`)
+      );
     }
-  }
-
-  async verificarTempoMaximo(client) {
-    const agora = Date.now();
-
-    for (const [id, dados] of this.pontosAtivos) {
-      const tempoTotal = agora - dados.inicio;
-
-      if (tempoTotal >= CONFIG.TEMPO_MAXIMO_PLANTAO) {
-        console.log(`⚠️ Usuário ${id} excedeu o tempo máximo de plantão`);
-        
-        try {
-          const guild = await client.guilds.fetch(CONFIG.GUILD_ID);
-          const membro = await guild.members.fetch(id).catch(() => null);
-          
-          if (membro) {
-            await membro.roles.add(CONFIG.ROLE_ADVERTENCIA).catch(() => {});
-            await membro.roles.remove(CONFIG.ROLE_EM_SERVICO).catch(() => {});
-            await membro.roles.add(CONFIG.ROLE_FORA_SERVICO).catch(() => {});
-            
-            const canalLogs = await client.channels.fetch(this.config.logsCanal).catch(() => null);
-            if (canalLogs) {
-              await canalLogs.send(
-                `⚠️ <@${id}> excedeu o tempo máximo de plantão (7h) e recebeu uma advertência!`
-              );
-            }
-          }
-        } catch (error) {
-          console.error("❌ Erro ao processar tempo máximo:", error);
-        }
-
-        this.pontosAtivos.delete(id);
-        this.atualizarPainel(client);
-      }
-    }
-  }
-
-  iniciarPlantao(userId, member) {
-    if (this.pontosAtivos.has(userId)) {
-      return { sucesso: false, mensagem: "❌ Você já está em plantão!" };
-    }
-
-    this.pontosAtivos.set(userId, {
-      inicio: Date.now(),
-      pausa: 0,
-      pausado: false,
-      pausaInicio: null
-    });
-
-    member.roles.add(CONFIG.ROLE_EM_SERVICO).catch(() => {});
-    member.roles.remove(CONFIG.ROLE_FORA_SERVICO).catch(() => {});
-
-    return { sucesso: true, mensagem: "🟢 Plantão iniciado com sucesso!" };
-  }
-
-  pausarPlantao(userId) {
-    const dados = this.pontosAtivos.get(userId);
-    
-    if (!dados) {
-      return { sucesso: false, mensagem: "❌ Você não está em plantão!" };
-    }
-
-    if (!dados.pausado) {
-      dados.pausado = true;
-      dados.pausaInicio = Date.now();
-      return { sucesso: true, mensagem: "# Plantão pausado!" };
-    } else {
-      dados.pausado = false;
-      dados.pausa += (Date.now() - dados.pausaInicio);
-      dados.pausaInicio = null;
-      return { sucesso: true, mensagem: "▶️ Plantão retomado!" };
-    }
-  }
-
-  finalizarPlantao(userId, member) {
-    const dados = this.pontosAtivos.get(userId);
-    
-    if (!dados) {
-      return { sucesso: false, mensagem: "❌ Você não está em plantão!" };
-    }
-
-    if (dados.pausado) {
-      dados.pausa += (Date.now() - dados.pausaInicio);
-    }
-
-    const tempoTotal = this.calcularTempoAtivo(dados);
-    
-    const tempoAnterior = this.ranking.get(userId) || 0;
-    this.ranking.set(userId, tempoAnterior + tempoTotal);
-
-    this.pontosAtivos.delete(userId);
-
-    member.roles.remove(CONFIG.ROLE_EM_SERVICO).catch(() => {});
-    member.roles.add(CONFIG.ROLE_FORA_SERVICO).catch(() => {});
-
-    return { 
-      sucesso: true, 
-      mensagem: `🔴 Plantão finalizado! Tempo total: ${this.formatarTempo(tempoTotal)}` 
-    };
-  }
-
-  adicionarHoras(userId, horas, minutos) {
-    const tempoEmMs = ((horas * 60) + minutos) * 60000;
-    const tempoAtual = this.ranking.get(userId) || 0;
-    this.ranking.set(userId, tempoAtual + tempoEmMs);
-    
-    return this.formatarTempo(this.ranking.get(userId));
-  }
-
-  removerHoras(userId, horas, minutos) {
-    const tempoEmMs = ((horas * 60) + minutos) * 60000;
-    const tempoAtual = this.ranking.get(userId) || 0;
-    const novoTempo = Math.max(0, tempoAtual - tempoEmMs);
-    this.ranking.set(userId, novoTempo);
-    
-    return this.formatarTempo(novoTempo);
-  }
-
-  resetar() {
-    this.pontosAtivos.clear();
-    this.ranking.clear();
-    this.config = {
-      painelCanal: null,
-      logsCanal: null,
-      mensagemId: null
-    };
-  }
-
-  obterRanking() {
-    return [...this.ranking.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, tempo]) => `<@${id}> • ${this.formatarTempo(tempo)}`)
-      .join("\n");
   }
 }
 
-// ═══════════════════════════════════════════
-// 🤖 CLIENTE DISCORD
-// ═══════════════════════════════════════════
-
-const sistema = new SistemaHospital();
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
-});
-
-const rest = new REST({ version: "10" }).setToken(CONFIG.TOKEN);
-
-// ═══════════════════════════════════════════
-// 📋 COMANDOS SLASH
-// ═══════════════════════════════════════════
-
-const comandos = [
-  new SlashCommandBuilder()
-    .setName("painelhp")
-    .setDescription("Criar painel de controle hospitalar")
-    .addChannelOption(option =>
-      option.setName("canal")
-        .setDescription("Canal onde o painel será criado")
-        .setRequired(true))
-    .addChannelOption(option =>
-      option.setName("logs")
-        .setDescription("Canal de logs do sistema")
-        .setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("rankinghp")
-    .setDescription("Visualizar ranking de horas"),
-
-  new SlashCommandBuilder()
-    .setName("resetponto")
-    .setDescription("Resetar todo o sistema")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-  new SlashCommandBuilder()
-    .setName("addhora")
-    .setDescription("Adicionar horas ao ranking de um usuário")
-    .addUserOption(option =>
-      option.setName("usuario")
-        .setDescription("Usuário alvo")
-        .setRequired(true))
-    .addIntegerOption(option =>
-      option.setName("horas")
-        .setDescription("Quantidade de horas")
-        .setRequired(true))
-    .addIntegerOption(option =>
-      option.setName("minutos")
-        .setDescription("Quantidade de minutos")
-        .setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-  new SlashCommandBuilder()
-    .setName("removerhora")
-    .setDescription("Remover horas do ranking de um usuário")
-    .addUserOption(option =>
-      option.setName("usuario")
-        .setDescription("Usuário alvo")
-        .setRequired(true))
-    .addIntegerOption(option =>
-      option.setName("horas")
-        .setDescription("Quantidade de horas")
-        .setRequired(true))
-    .addIntegerOption(option =>
-      option.setName("minutos")
-        .setDescription("Quantidade de minutos")
-        .setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-].map(comando => comando.toJSON());
-
-// ═══════════════════════════════════════════
-// 🎯 EVENTOS
-// ═══════════════════════════════════════════
-
-client.once("ready", async () => {
-  console.log(`✅ Bot ${client.user.tag} está online!`);
-  console.log(`📊 Servindo ${client.guilds.cache.size} servidor(es)`);
-  console.log(`🌐 Servidor web: http://localhost:${CONFIG.PORT}`);
-
-  try {
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, CONFIG.GUILD_ID),
-      { body: comandos }
-    );
-    console.log("✅ Comandos registrados com sucesso!");
-  } catch (error) {
-    console.error("❌ Erro ao registrar comandos:", error);
-  }
-
-  // Atualizações periódicas
-  setInterval(() => sistema.atualizarPainel(client), CONFIG.INTERVALO_ATUALIZACAO_PAINEL);
-  setInterval(() => sistema.verificarTempoMaximo(client), CONFIG.INTERVALO_VERIFICACAO_TEMPO);
-});
-
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
-  
-  if (interaction.isChatInputCommand()) {
-    await interaction.deferReply({ ephemeral: true });
+  try {
 
-    const comando = interaction.commandName;
+    if (interaction.isChatInputCommand()) {
 
-    try {
-      switch (comando) {
-        
-        case "painelhp": {
-          const canalPainel = interaction.options.getChannel("canal");
-          const canalLogs = interaction.options.getChannel("logs");
+      if (interaction.commandName === "painelhp") {
 
-          sistema.config.painelCanal = canalPainel.id;
-          sistema.config.logsCanal = canalLogs.id;
+        config.painel = interaction.options.getChannel("canal").id;
+        config.logs = interaction.options.getChannel("logs").id;
 
-          const botoes = new ActionRowBuilder()
-            .addComponents(
-              new ButtonBuilder()
-                .setCustomId("iniciar")
-                .setLabel("🟢 Iniciar Plantão")
-                .setStyle(ButtonStyle.Success),
-              
-              new ButtonBuilder()
-                .setCustomId("pausar")
-                .setLabel("# Pausar/Retomar")
-                .setStyle(ButtonStyle.Secondary),
-              
-              new ButtonBuilder()
-                .setCustomId("finalizar")
-                .setLabel("🔴 Finalizar Plantão")
-                .setStyle(ButtonStyle.Danger)
-            );
+        const embed = new EmbedBuilder()
+          .setTitle("🏥 Controle de Plantão")
+          .setDescription("Use os botões abaixo");
 
-          const mensagem = await canalPainel.send({
-            content: "🏥 **Controle de Plantão Hospitalar**",
-            components: [botoes]
-          });
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+        );
 
-          sistema.config.mensagemId = mensagem.id;
+        const canal = await client.channels.fetch(config.painel);
+        const msg = await canal.send({ embeds: [embed], components: [row] });
 
-          await interaction.editReply({
-            content: "✅ Painel criado com sucesso!"
-          });
-          break;
-        }
+        config.msgId = msg.id;
 
-        case "rankinghp": {
-          const rankingTexto = sistema.obterRanking();
-
-          const embed = new EmbedBuilder()
-            .setColor("#3b82f6")
-            .setTitle("🏆 Ranking de Horas")
-            .setDescription(rankingTexto || "📭 Nenhum dado disponível")
-            .setFooter({ text: "Hospital Bella - Sistema de Plantão" })
-            .setTimestamp();
-
-          await interaction.editReply({ embeds: [embed] });
-          break;
-        }
-
-        case "resetponto": {
-          const membro = await interaction.guild.members.fetch(interaction.user.id);
-          
-          if (!membro.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.editReply({
-              content: "❌ Apenas administradores podem usar este comando!"
-            });
-          }
-
-          sistema.resetar();
-
-          await interaction.editReply({
-            content: "✅ Sistema resetado com sucesso!"
-          });
-          break;
-        }
-
-        case "addhora": {
-          const usuario = interaction.options.getUser("usuario");
-          const horas = interaction.options.getInteger("horas");
-          const minutos = interaction.options.getInteger("minutos") || 0;
-
-          const novoTempo = sistema.adicionarHoras(usuario.id, horas, minutos);
-
-          await interaction.editReply({
-            content: `✅ ${usuario} agora tem **${novoTempo}** no ranking!`
-          });
-          break;
-        }
-
-        case "removerhora": {
-          const usuario = interaction.options.getUser("usuario");
-          const horas = interaction.options.getInteger("horas");
-          const minutos = interaction.options.getInteger("minutos") || 0;
-
-          const novoTempo = sistema.removerHoras(usuario.id, horas, minutos);
-
-          await interaction.editReply({
-            content: `❌ ${usuario} agora tem **${novoTempo}** no ranking!`
-          });
-          break;
-        }
+        return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
       }
-    } catch (error) {
-      console.error(`❌ Erro no comando ${comando}:`, error);
-      await interaction.editReply({
-        content: "❌ Ocorreu um erro ao processar o comando!"
-      });
-    }
-  }
 
-  if (interaction.isButton()) {
-    await interaction.deferReply({ ephemeral: true });
+      if (interaction.commandName === "rankinghp") {
 
-    try {
-      const userId = interaction.user.id;
-      const member = interaction.member;
+        if (ranking.size === 0)
+          return interaction.reply("❌ Sem dados");
 
-      if (!member) {
-        return interaction.editReply({
-          content: "❌ Erro ao obter informações do membro!"
+        let lista = "";
+
+        const ordenado = [...ranking.entries()].sort((a, b) => b[1] - a[1]);
+
+        for (const [id, tempo] of ordenado) {
+          lista += `<@${id}> • ${formatar(tempo)}\n`;
+        }
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(lista)]
         });
       }
-
-      switch (interaction.customId) {
-        
-        case "iniciar": {
-          const resultado = sistema.iniciarPlantao(userId, member);
-          await interaction.editReply({ content: resultado.mensagem });
-          break;
-        }
-
-        case "pausar": {
-          const resultado = sistema.pausarPlantao(userId);
-          await interaction.editReply({ content: resultado.mensagem });
-          break;
-        }
-
-        case "finalizar": {
-          const resultado = sistema.finalizarPlantao(userId, member);
-          await interaction.editReply({ content: resultado.mensagem });
-          break;
-        }
-      }
-    } catch (error) {
-      console.error("❌ Erro ao processar botão:", error);
-      await interaction.editReply({
-        content: "❌ Erro ao processar a ação!"
-      });
     }
-  }
+
+    if (interaction.isButton()) {
+
+      const id = interaction.user.id;
+
+      if (interaction.customId === "iniciar") {
+
+        pontos.set(id, { inicio: Date.now() });
+        atualizarPainel();
+
+        sendLog(new EmbedBuilder()
+          .setColor("#22c55e")
+          .setDescription(`<@${id}> iniciou serviço`)
+        );
+
+        return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
+      }
+
+      if (interaction.customId === "finalizar") {
+
+        const ponto = pontos.get(id);
+        if (!ponto)
+          return interaction.reply({ content: "❌ Você não iniciou!", ephemeral: true });
+
+        const tempo = Date.now() - ponto.inicio;
+
+        ranking.set(id, (ranking.get(id) || 0) + tempo);
+        pontos.delete(id);
+
+        atualizarPainel();
+
+        sendLog(new EmbedBuilder()
+          .setColor("#ef4444")
+          .setDescription(`<@${id}> finalizou • ${formatar(tempo)}`)
+        );
+
+        return interaction.reply({
+          content: `🔴 Finalizado: ${formatar(tempo)}`,
+          ephemeral: true
+        });
+      }
+    }
+
+  } catch {}
 });
 
-// ═══════════════════════════════════════════
-// 🚀 INICIALIZAÇÃO
-// ═══════════════════════════════════════════
+// 🛡️ ANTI-CRASH
+process.on("unhandledRejection", console.log);
+process.on("uncaughtException", console.log);
 
-if (!CONFIG.TOKEN) {
-  console.error("❌ TOKEN não encontrado! Configure a variável de ambiente TOKEN");
-  process.exit(1);
-}
-
-client.login(CONFIG.TOKEN)
-  .then(() => console.log("✅ Login realizado com sucesso!"))
-  .catch(error => {
-    console.error("❌ Erro ao fazer login:", error);
-    process.exit(1);
-  });
-
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("🛑 Recebido sinal de encerramento...");
-  server.close(() => {
-    console.log("✅ Servidor web encerrado");
-    client.destroy();
-    process.exit(0);
-  });
-});
-
-process.on("SIGINT", () => {
-  console.log("🛑 Recebido sinal de interrupção...");
-  server.close(() => {
-    console.log("✅ Servidor web encerrado");
-    client.destroy();
-    process.exit(0);
-  });
-});
+client.login(TOKEN);
