@@ -21,11 +21,18 @@ app.listen(3000);
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+const CATEGORY_ID = process.env.CATEGORY_ID;
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
 
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
   console.log("❌ Faltando TOKEN / CLIENT_ID / GUILD_ID");
   process.exit(1);
 }
+
+if (!CATEGORY_ID || !LOG_CHANNEL_ID) {
+  console.warn("⚠️  CATEGORY_ID ou LOG_CHANNEL_ID não definidos — algumas funções podem não operar corretamente.");
+}
+
 
 // 🛡️ CARGOS
 const STAFF = "1490431614055088128";
