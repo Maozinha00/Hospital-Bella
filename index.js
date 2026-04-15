@@ -17,7 +17,7 @@ const app = express();
 app.get("/", (req, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
-// 🔐 TOKEN
+// 🔐 CONFIG
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -30,8 +30,13 @@ if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
 // 🛡️ STAFF
 const STAFF_ID = "1490431614055088128";
 
-// 🎭 CARGOS
-const CARGO_ADV = "1477683902041690350";
+// 👑 HIERARQUIA
+const HIERARQUIA = [
+  { id: "1477683902121509018", nome: "Diretor" },
+  { id: "1477683902121509017", nome: "Vice-Diretor" },
+  { id: "1477683902121509016", nome: "Supervisor" },
+  { id: "1477683902121509015", nome: "Coordenador" }
+];
 
 // 🧠 SISTEMA
 let config = { painel: null, msgId: null, logs: null };
@@ -40,15 +45,44 @@ const ranking = new Map();
 
 // 🚀 CLIENT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 // 📌 COMANDOS
 const commands = [
-  new SlashCommandBuilder().setName("painelhp").setDescription("Criar painel hospital"),
-  new SlashCommandBuilder().setName("rankinghp").setDescription("Ver ranking de plantão")
+  new SlashCommandBuilder()
+    .setName("painelhp")
+    .setDescription("Criar painel hospital")
+    .addChannelOption(o =>
+      o.setName("canal").setDescription("Canal do painel").setRequired(true))
+    .addChannelOption(o =>
+      o.setName("logs").setDescription("Canal de logs").setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName("rankinghp")
+    .setDescription("Ver ranking"),
+
+  new SlashCommandBuilder()
+    .setName("addhora")
+    .setDescription("Adicionar horas")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName("removerhora")
+    .setDescription("Remover horas")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName("resethoras")
+    .setDescription("Resetar ranking")
 ].map(c => c.toJSON());
 
 // 🔥 READY
@@ -70,67 +104,55 @@ function format(ms) {
   return `${h}h ${m}m`;
 }
 
-// 👑 RESPONSÁVEL DO PLANTÃO (HIERARQUIA)
+// 👑 HIERARQUIA RESPONSÁVEL
 function getBoss(guild) {
-  const roles = [
-    "1477683902121509018", // Diretor
-    "1477683902121509017", // Vice
-    "1477683902121509016", // Supervisor
-    "1477683902121509015"  // Coordenador
-  ];
-
-  for (const id of roles) {
-    const role = guild.roles.cache.get(id);
+  for (const roleData of HIERARQUIA) {
+    const role = guild.roles.cache.get(roleData.id);
     if (role && role.members.size > 0) {
       const user = role.members.first();
-      return `<@${user.id}> • ${role.name}`;
+      return `<@${user.id}> • ${roleData.nome}`;
     }
   }
-
-  return "Nenhum responsável ativo";
+  return "Nenhum";
 }
 
-// 🏥 PAINEL PREMIUM
+// 🏥 PAINEL
 async function updatePanel() {
-  try {
-    if (!config.painel || !config.msgId) return;
+  if (!config.painel || !config.msgId) return;
 
-    const channel = await client.channels.fetch(config.painel);
-    const msg = await channel.messages.fetch(config.msgId);
+  const channel = await client.channels.fetch(config.painel).catch(() => null);
+  if (!channel) return;
 
-    let lista = "";
+  const msg = await channel.messages.fetch(config.msgId).catch(() => null);
+  if (!msg) return;
 
-    for (const [id, data] of pontos) {
-      const tempo = Date.now() - data.inicio;
-      lista += `┆ 👨‍⚕️ <@${id}> • ${format(tempo)}\n`;
-    }
+  let list = "";
+  for (const [id, data] of pontos) {
+    list += `┆ 👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
+  }
 
-    const embed = new EmbedBuilder()
-      .setColor("#0f172a")
-      .setDescription(
-`🏥 ═══════〔 HOSPITAL BELLA PREMIUM 〕═══════
+  const embed = new EmbedBuilder()
+    .setColor("#0f172a")
+    .setDescription(
+`🏥 ═══════〔 HOSPITAL BELLA 〕═══════
 
 👑 RESPONSÁVEL DO PLANTÃO
 ${getBoss(channel.guild)}
 
 👨‍⚕️ MÉDICOS EM SERVIÇO
-${lista || "┆ Nenhum médico em serviço"}
+${list || "Nenhum"}
 
-📊 STATUS DO SISTEMA
-┆ 👥 Ativos: ${pontos.size}
-┆ 🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+📊 STATUS
+┆ Ativos: ${pontos.size}
+┆ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
 
-💎 Sistema Hospitalar Premium`
-      );
+🔥 Sistema Hospitalar`
+    );
 
-    await msg.edit({ embeds: [embed] });
-
-  } catch (err) {
-    console.log("Painel error:", err.message);
-  }
+  msg.edit({ embeds: [embed] });
 }
 
-// 🔒 PROTEÇÃO STAFF
+// 🔐 PROTEÇÃO STAFF
 async function isStaff(interaction) {
   const member = await interaction.guild.members.fetch(interaction.user.id);
   return member.roles.cache.has(STAFF_ID);
@@ -139,97 +161,95 @@ async function isStaff(interaction) {
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
-  if (interaction.isChatInputCommand()) {
+  if (!interaction.isChatInputCommand()) return;
 
-    if (!(await isStaff(interaction))) {
-      return interaction.reply({ content: "❌ Sem permissão (STAFF)", ephemeral: true });
-    }
-
-    // PAINEL
-    if (interaction.commandName === "painelhp") {
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("iniciar")
-          .setLabel("🟢 Iniciar")
-          .setStyle(ButtonStyle.Success),
-
-        new ButtonBuilder()
-          .setCustomId("finalizar")
-          .setLabel("🔴 Finalizar")
-          .setStyle(ButtonStyle.Danger)
-      );
-
-      const msg = await interaction.channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#0f172a")
-            .setDescription("🏥 Painel Hospital Premium ativo")
-        ],
-        components: [row]
-      });
-
-      config.painel = interaction.channel.id;
-      config.msgId = msg.id;
-
-      return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
-    }
-
-    // RANKING
-    if (interaction.commandName === "rankinghp") {
-
-      const top = [...ranking.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([id, t]) => `<@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🏆 Ranking Hospitalar")
-            .setDescription(top || "Sem dados")
-            .setColor("#0f172a")
-        ]
-      });
-    }
+  if (!await isStaff(interaction)) {
+    return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
   }
 
-  // BOTÕES
-  if (interaction.isButton()) {
+  // PAINEL
+  if (interaction.commandName === "painelhp") {
+    config.painel = interaction.options.getChannel("canal").id;
+    config.logs = interaction.options.getChannel("logs").id;
 
-    const id = interaction.user.id;
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+    );
 
-    if (interaction.customId === "iniciar") {
-      pontos.set(id, { inicio: Date.now() });
+    const msg = await interaction.channel.send({
+      content: "🏥 Painel ativo",
+      components: [row]
+    });
 
-      return interaction.reply({
-        content: "🟢 Plantão iniciado!",
-        ephemeral: true
-      });
-    }
+    config.msgId = msg.id;
 
-    if (interaction.customId === "finalizar") {
+    return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
+  }
 
-      const p = pontos.get(id);
-      if (!p) {
-        return interaction.reply({ content: "❌ Você não iniciou", ephemeral: true });
-      }
+  // RANKING
+  if (interaction.commandName === "rankinghp") {
+    const top = [...ranking.entries()]
+      .sort((a,b)=>b[1]-a[1])
+      .map(([id,t])=>`<@${id}> • ${format(t)}`)
+      .join("\n");
 
-      const tempo = Date.now() - p.inicio;
-      ranking.set(id, (ranking.get(id) || 0) + tempo);
-      pontos.delete(id);
+    return interaction.reply({
+      embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Vazio")]
+    });
+  }
 
-      return interaction.reply({
-        content: `🔴 Finalizado: ${format(tempo)}`,
-        ephemeral: true
-      });
-    }
+  // ADD HORA
+  if (interaction.commandName === "addhora") {
+    const u = interaction.options.getUser("usuario");
+    const h = interaction.options.getInteger("horas") * 3600000;
+
+    ranking.set(u.id, (ranking.get(u.id) || 0) + h);
+
+    return interaction.reply({ content: `✅ Adicionado`, ephemeral: true });
+  }
+
+  // REMOVE HORA
+  if (interaction.commandName === "removerhora") {
+    const u = interaction.options.getUser("usuario");
+    const h = interaction.options.getInteger("horas") * 3600000;
+
+    ranking.set(u.id, Math.max(0, (ranking.get(u.id) || 0) - h));
+
+    return interaction.reply({ content: `❌ Removido`, ephemeral: true });
+  }
+
+  // RESET
+  if (interaction.commandName === "resethoras") {
+    ranking.clear();
+    return interaction.reply({ content: "♻️ Resetado!", ephemeral: true });
   }
 });
 
-// 🛡️ ANTI CRASH
-process.on("unhandledRejection", console.log);
-process.on("uncaughtException", console.log);
+// 🔘 BOTÕES
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
 
-// 🚀 LOGIN
+  const id = interaction.user.id;
+
+  if (interaction.customId === "iniciar") {
+    pontos.set(id, { inicio: Date.now() });
+    return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
+  }
+
+  if (interaction.customId === "finalizar") {
+    const p = pontos.get(id);
+    if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
+
+    const tempo = Date.now() - p.inicio;
+    ranking.set(id, (ranking.get(id) || 0) + tempo);
+    pontos.delete(id);
+
+    return interaction.reply({
+      content: `🔴 Finalizado: ${format(tempo)}`,
+      ephemeral: true
+    });
+  }
+});
+
 client.login(TOKEN);
