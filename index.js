@@ -17,7 +17,7 @@ const app = express();
 app.get("/", (req, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
-// 🔐 CONFIG
+// 🔐 CONFIG ENV
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -27,12 +27,12 @@ if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
   process.exit(1);
 }
 
-// 🛡️ CARGOS
+// 🛡️ STAFF
 const STAFF_ROLE = "1490431614055088128";
 
+// 👑 CARGOS
 const CARGO_EM = "1492553421973356795";
 const CARGO_FORA = "1492553631642288160";
-const CARGO_ADV = "1477683902041690350";
 
 // 👑 HIERARQUIA
 const HIERARQUIA = [
@@ -42,7 +42,7 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
-// ⚙️ SISTEMA
+// 🧠 SISTEMA
 let config = { painel: null, logs: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
@@ -67,14 +67,18 @@ const commands = [
   new SlashCommandBuilder()
     .setName("addhora")
     .setDescription("Adicionar horas")
-    .addUserOption(o => o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setDescription("Horas").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("removerhora")
     .setDescription("Remover horas")
-    .addUserOption(o => o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setDescription("Horas").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("resethp")
@@ -104,7 +108,7 @@ function format(ms) {
   return `${h}h ${m}m`;
 }
 
-// 👑 HIERARQUIA RESPONSÁVEL
+// 👑 HIERARQUIA
 function getBoss(guild) {
   for (const roleData of HIERARQUIA) {
     const role = guild.roles.cache.get(roleData.id);
@@ -116,7 +120,7 @@ function getBoss(guild) {
   return "Nenhum";
 }
 
-// 🏥 PAINEL (SEM DUPLICAR)
+// 🏥 PAINEL BONITO
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -134,19 +138,32 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(
-`🏥 ═══════〔 HOSPITAL BELLA 〕═══════
+`🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+
+✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
 👑 RESPONSÁVEL DO PLANTÃO
 ${getBoss(channel.guild)}
 
-👨‍⚕️ MÉDICOS EM SERVIÇO
-${list || "- Nenhum"}
+────────────────────────────
 
-📊 STATUS
-┆ Ativos: ${pontos.size}
-┆ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+👨‍⚕️ EQUIPE EM SERVIÇO
+${list || "- Nenhum médico em serviço no momento"}
 
-🏥 Sistema de Ponto`
+────────────────────────────
+
+📊 STATUS DO SISTEMA
+👥 Médicos ativos: ${pontos.size}
+🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+
+────────────────────────────
+
+🚨 OBSERVAÇÕES
+• Sistema automático de controle de plantão
+• Registro de horas em tempo real
+• Ranking atualizado continuamente
+
+🏥 Hospital Bella • Sistema Profissional`
       );
 
     await msg.edit({ embeds: [embed] });
@@ -164,6 +181,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
+
   if (!isStaff(member)) {
     return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
   }
@@ -178,15 +196,22 @@ client.on("interactionCreate", async (interaction) => {
     config.logs = logs.id;
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder()
+        .setCustomId("iniciar")
+        .setLabel("🟢 Iniciar")
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
+        .setCustomId("finalizar")
+        .setLabel("🔴 Finalizar")
+        .setStyle(ButtonStyle.Danger)
     );
 
     const msg = await canal.send({
       embeds: [
         new EmbedBuilder()
           .setColor("#0f172a")
-          .setDescription("🏥 Painel Hospital Ativo")
+          .setDescription("🏥 Painel Hospital ativo")
       ],
       components: [row]
     });
@@ -199,17 +224,17 @@ client.on("interactionCreate", async (interaction) => {
   // ADD HORA
   if (interaction.commandName === "addhora") {
     const user = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas") * 60 * 60 * 1000;
+    const h = interaction.options.getInteger("horas") * 3600000;
 
     ranking.set(user.id, (ranking.get(user.id) || 0) + h);
 
     return interaction.reply({ content: "✅ Hora adicionada!", ephemeral: true });
   }
 
-  // REMOVER HORA
+  // REMOVE HORA
   if (interaction.commandName === "removerhora") {
     const user = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas") * 60 * 60 * 1000;
+    const h = interaction.options.getInteger("horas") * 3600000;
 
     ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - h));
 
@@ -220,7 +245,7 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "resethp") {
     pontos.clear();
     ranking.clear();
-    return interaction.reply({ content: "♻️ Resetado!", ephemeral: true });
+    return interaction.reply({ content: "♻️ Sistema resetado!", ephemeral: true });
   }
 
   // RANKING
