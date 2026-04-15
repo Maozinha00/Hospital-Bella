@@ -14,7 +14,7 @@ import {
 
 // 🌐 KEEP ALIVE
 const app = express();
-app.get("/", (req, res) => res.send("Bot online 🔥"));
+app.get("/", (_, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
 // 🔐 CONFIG
@@ -97,20 +97,22 @@ client.once("ready", async () => {
   setInterval(updatePanel, 30000);
 });
 
-// ⏱ FORMAT
+// ⏱ FORMATAR
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
 
-// 👑 HIERARQUIA RESPONSÁVEL
+// 👑 RESPONSÁVEL POR HIERARQUIA
 function getBoss(guild) {
+  if (!guild) return "Nenhum";
+
   for (const roleData of HIERARQUIA) {
     const role = guild.roles.cache.get(roleData.id);
     if (role && role.members.size > 0) {
       const user = role.members.first();
-      return `<@${user.id}> • ${roleData.nome}`;
+      if (user) return `<@${user.id}> • ${roleData.nome}`;
     }
   }
   return "Nenhum";
@@ -118,22 +120,24 @@ function getBoss(guild) {
 
 // 🏥 PAINEL
 async function updatePanel() {
-  if (!config.painel || !config.msgId) return;
+  try {
+    if (!config.painel || !config.msgId) return;
 
-  const channel = await client.channels.fetch(config.painel).catch(() => null);
-  if (!channel) return;
+    const channel = await client.channels.fetch(config.painel).catch(() => null);
+    if (!channel) return;
 
-  const msg = await channel.messages.fetch(config.msgId).catch(() => null);
-  if (!msg) return;
+    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
+    if (!msg) return;
 
-  let list = "";
-  for (const [id, data] of pontos) {
-    list += `┆ 👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
-  }
+    let list = "";
 
-  const embed = new EmbedBuilder()
-    .setColor("#0f172a")
-    .setDescription(
+    for (const [id, data] of pontos) {
+      list += `┆ 👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#0f172a")
+      .setDescription(
 `🏥 ═══════〔 HOSPITAL BELLA 〕═══════
 
 👑 RESPONSÁVEL DO PLANTÃO
@@ -147,23 +151,30 @@ ${list || "Nenhum"}
 ┆ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
 
 🔥 Sistema Hospitalar`
-    );
+      );
 
-  msg.edit({ embeds: [embed] });
+    await msg.edit({ embeds: [embed] });
+
+  } catch (e) {
+    console.log("Erro painel:", e.message);
+  }
 }
 
-// 🔐 PROTEÇÃO STAFF
+// 🔐 CHECAR STAFF
 async function isStaff(interaction) {
-  const member = await interaction.guild.members.fetch(interaction.user.id);
-  return member.roles.cache.has(STAFF_ID);
+  try {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    return member.roles.cache.has(STAFF_ID);
+  } catch {
+    return false;
+  }
 }
 
-// 🎯 INTERAÇÕES
+// 🎯 COMANDOS
 client.on("interactionCreate", async (interaction) => {
-
   if (!interaction.isChatInputCommand()) return;
 
-  if (!await isStaff(interaction)) {
+  if (!(await isStaff(interaction))) {
     return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
   }
 
@@ -178,13 +189,13 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     const msg = await interaction.channel.send({
-      content: "🏥 Painel ativo",
+      content: "🏥 Painel Hospital ativo",
       components: [row]
     });
 
     config.msgId = msg.id;
 
-    return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
+    return interaction.reply({ content: "✅ Criado!", ephemeral: true });
   }
 
   // RANKING
@@ -206,7 +217,7 @@ client.on("interactionCreate", async (interaction) => {
 
     ranking.set(u.id, (ranking.get(u.id) || 0) + h);
 
-    return interaction.reply({ content: `✅ Adicionado`, ephemeral: true });
+    return interaction.reply({ content: "✅ Adicionado", ephemeral: true });
   }
 
   // REMOVE HORA
@@ -216,7 +227,7 @@ client.on("interactionCreate", async (interaction) => {
 
     ranking.set(u.id, Math.max(0, (ranking.get(u.id) || 0) - h));
 
-    return interaction.reply({ content: `❌ Removido`, ephemeral: true });
+    return interaction.reply({ content: "❌ Removido", ephemeral: true });
   }
 
   // RESET
@@ -243,6 +254,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const tempo = Date.now() - p.inicio;
     ranking.set(id, (ranking.get(id) || 0) + tempo);
+
     pontos.delete(id);
 
     return interaction.reply({
