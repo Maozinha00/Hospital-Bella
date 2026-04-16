@@ -162,9 +162,10 @@ ${list}
 ────────────────────────────
 
 🚨 OBSERVAÇÕES
-• Sistema automático de controle de plantão  
-• Registro de horas em tempo real  
-• Ranking atualizado continuamente  
+• Sistema automático de controle de plantão
+• Registro de horas em tempo real
+• Ranking atualizado continuamente
+• ⚠️ Não deixe o ponto aberto, pode zerar as horas
 
 🏥 Hospital Bella • Sistema Profissional
 `);
