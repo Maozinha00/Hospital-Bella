@@ -17,7 +17,7 @@ const app = express();
 app.get("/", (_, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
-// 🔐 CONFIG ENV
+// 🔐 CONFIG
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -44,6 +44,11 @@ function format(ms) {
   return `${h}h ${m}m`;
 }
 
+// 🔁 HORAS + MINUTOS -> MS
+function toMs(h = 0, m = 0) {
+  return (h * 3600000) + (m * 60000);
+}
+
 // 👑 HIERARQUIA
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor" },
@@ -54,24 +59,14 @@ const HIERARQUIA = [
 
 // 👑 RESPONSÁVEIS
 function getBossList(guild) {
-  return HIERARQUIA
-    .map(roleData => {
-      const role = guild.roles.cache.get(roleData.id);
+  return HIERARQUIA.map(r => {
+    const role = guild.roles.cache.get(r.id);
+    const member = role?.members?.first();
 
-      if (!role || role.members.size === 0) {
-        return `👑 Nenhum • ${roleData.nome}`;
-      }
-
-      const members = [...role.members.values()];
-      const member = members.find(m => m.presence?.status !== "offline") || members[0];
-
-      if (!member) {
-        return `👑 Nenhum • ${roleData.nome}`;
-      }
-
-      return `👑 <@${member.id}> • ${roleData.nome}`;
-    })
-    .join("\n");
+    return member
+      ? `👑 <@${member.id}> • ${r.nome}`
+      : `👑 Nenhum • ${r.nome}`;
+  }).join("\n");
 }
 
 // 🔐 STAFF CHECK
@@ -92,19 +87,23 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("addhora")
-  .setDescription("Adicionar horas")
+  .setDescription("Adicionar tempo (horas e minutos)")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas").setRequired(true)),
+    o.setName("horas").setDescription("Horas").setRequired(false))
+  .addIntegerOption(o =>
+    o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
 new SlashCommandBuilder()
   .setName("removerhora")
-  .setDescription("Remover horas")
+  .setDescription("Remover tempo (horas e minutos)")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas").setRequired(true)),
+    o.setName("horas").setDescription("Horas").setRequired(false))
+  .addIntegerOption(o =>
+    o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
 new SlashCommandBuilder()
   .setName("resethp")
@@ -116,13 +115,13 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("forcar_entrar")
-  .setDescription("STAFF: colocar usuário em serviço")
+  .setDescription("Colocar usuário em serviço")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("forcar_sair")
-  .setDescription("STAFF: tirar usuário do serviço e salvar tempo")
+  .setDescription("Tirar usuário do serviço e salvar tempo")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
 
@@ -140,7 +139,7 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL UPDATE
+// 🏥 PAINEL
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -149,49 +148,34 @@ async function updatePanel() {
     const msg = await channel.messages.fetch(config.msgId);
 
     let list = "";
-
     for (const [id, data] of pontos) {
-      const time = Date.now() - data.inicio;
-      list += `👨‍⚕️ <@${id}> • ${format(time)}\n`;
+      list += `👨‍⚕️ <@${id}> • ${format(Date.now() - data.inicio)}\n`;
     }
 
-    if (!list) list = "- Nenhum médico em serviço no momento";
+    if (!list) list = "- Nenhum médico em serviço";
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+🏥 **HOSPITAL BELLA**
 
-# ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
-
-** 👑 RESPONSÁVEL DO PLANTÃO **
+👑 Responsáveis:
 ${getBossList(channel.guild)}
 
-────────────────────────────
+──────────────────
 
-👨‍⚕️ EQUIPE EM SERVIÇO
+👨‍⚕️ Em serviço:
 ${list}
 
-────────────────────────────
+──────────────────
 
-📊 STATUS DO SISTEMA
-👥 Médicos ativos: ${pontos.size}
+👥 Ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
-
-────────────────────────────
-
-** 🚨 OBSERVAÇÕES
-• Sistema automático de controle de plantão  
-• Registro de horas em tempo real  
-• Ranking atualizado continuamente  
-• ⚠️ Evita perda de ponto esquecido **
-
-🏥 Hospital Bella • Sistema Profissional
 `);
 
     await msg.edit({ embeds: [embed] });
 
-  } catch (e) {}
+  } catch {}
 }
 
 // 🎯 INTERAÇÕES
@@ -200,9 +184,8 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   const member = interaction.member;
-  if (!isStaff(member)) {
+  if (!isStaff(member))
     return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
-  }
 
   const user = interaction.options.getUser("usuario");
 
@@ -215,23 +198,12 @@ client.on("interactionCreate", async (interaction) => {
     config.logs = logs.id;
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("iniciar")
-        .setLabel("🟢 Iniciar")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("finalizar")
-        .setLabel("🔴 Finalizar")
-        .setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
     );
 
     const msg = await canal.send({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#0f172a")
-          .setTitle("🏥 PAINEL HOSPITAL")
-          .setDescription("🟢 Sistema iniciado com sucesso")
-      ],
+      embeds: [new EmbedBuilder().setTitle("🏥 PAINEL HOSPITAL").setColor("#0f172a")],
       components: [row]
     });
 
@@ -240,75 +212,44 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
-  // ADD HORA
+  // ADD TEMPO
   if (interaction.commandName === "addhora") {
-    const h = interaction.options.getInteger("horas") * 3600000;
-    ranking.set(user.id, (ranking.get(user.id) || 0) + h);
+    const h = interaction.options.getInteger("horas") || 0;
+    const m = interaction.options.getInteger("minutos") || 0;
 
-    return interaction.reply({ content: "✅ Horas adicionadas!", ephemeral: true });
+    ranking.set(user.id, (ranking.get(user.id) || 0) + toMs(h, m));
+
+    return interaction.reply({ content: "✅ Tempo adicionado!", ephemeral: true });
   }
 
-  // REMOVE HORA
+  // REMOVE TEMPO
   if (interaction.commandName === "removerhora") {
-    const h = interaction.options.getInteger("horas") * 3600000;
-    ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - h));
+    const h = interaction.options.getInteger("horas") || 0;
+    const m = interaction.options.getInteger("minutos") || 0;
 
-    return interaction.reply({ content: "❌ Horas removidas!", ephemeral: true });
+    ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - toMs(h, m)));
+
+    return interaction.reply({ content: "❌ Tempo removido!", ephemeral: true });
   }
 
-  // RESET
-  if (interaction.commandName === "resethp") {
-    pontos.clear();
-    ranking.clear();
-    return interaction.reply({ content: "♻️ Sistema resetado!", ephemeral: true });
-  }
-
-  // RANKING
-  if (interaction.commandName === "rankinghp") {
-    const top = [...ranking.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, t]) => `<@${id}> • ${format(t)}`)
-      .join("\n");
-
-    return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle("🏆 Ranking Hospital")
-          .setDescription(top || "Sem dados")
-          .setColor("#0f172a")
-      ]
-    });
-  }
-
-  // 🟢 FORÇAR ENTRAR
+  // FORÇAR ENTRAR
   if (interaction.commandName === "forcar_entrar") {
-    if (pontos.has(user.id)) {
-      return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
-    }
-
     pontos.set(user.id, { inicio: Date.now() });
-
-    return interaction.reply({
-      content: `🟢 ${user} colocado em serviço`,
-      ephemeral: true
-    });
+    return interaction.reply({ content: `🟢 ${user} em serviço`, ephemeral: true });
   }
 
-  // 🔴 FORÇAR SAIR
+  // FORÇAR SAIR
   if (interaction.commandName === "forcar_sair") {
     const p = pontos.get(user.id);
 
-    if (!p) {
-      return interaction.reply({ content: "❌ Usuário não está em serviço", ephemeral: true });
-    }
+    if (!p)
+      return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
 
-    const time = Date.now() - p.inicio;
-
-    ranking.set(user.id, (ranking.get(user.id) || 0) + time);
+    ranking.set(user.id, (ranking.get(user.id) || 0) + (Date.now() - p.inicio));
     pontos.delete(user.id);
 
     return interaction.reply({
-      content: `🔴 ${user} removido do serviço • ${format(time)}`,
+      content: `🔴 ${user} removido do serviço`,
       ephemeral: true
     });
   }
@@ -327,19 +268,13 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "finalizar") {
     const p = pontos.get(id);
+    if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
 
-    if (!p) {
-      return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
-    }
-
-    const time = Date.now() - p.inicio;
-
-    ranking.set(id, (ranking.get(id) || 0) + time);
+    ranking.set(id, (ranking.get(id) || 0) + (Date.now() - p.inicio));
     pontos.delete(id);
 
     return interaction.reply({
-      content: `🔴 Finalizado: ${format(time)}`,
-      ephemeral: true
+      content: `🔴 Finalizado: ${format(Date.now() - p.inicio)}`
     });
   }
 });
