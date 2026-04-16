@@ -52,18 +52,28 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
-// 🧠 FUNÇÕES
-function getBoss(guild) {
-  for (const roleData of HIERARQUIA) {
-    const role = guild.roles.cache.get(roleData.id);
-    if (role && role.members.size > 0) {
-      const user = role.members.first();
-      return `<@${user.id}> • ${roleData.nome}`;
-    }
-  }
-  return "Nenhum";
+// 👑 RESPONSÁVEIS EM SERVIÇO (USANDO HIERARQUIA)
+function getBossList(guild) {
+  return HIERARQUIA
+    .map(roleData => {
+      const role = guild.roles.cache.get(roleData.id);
+
+      if (!role) {
+        return `👑 Nenhum • ${roleData.nome}`;
+      }
+
+      const member = role.members.first();
+
+      if (!member) {
+        return `👑 Nenhum • ${roleData.nome}`;
+      }
+
+      return `👑 <@${member.id}> • ${roleData.nome}`;
+    })
+    .join("\n");
 }
 
+// 🧠 FUNÇÕES
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
@@ -142,12 +152,8 @@ async function updatePanel() {
 ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
 👑 RESPONSÁVEL DO PLANTÃO
-${getBoss(channel.guild)}
-${getBoss(channel.guild)}
-${getBoss(channel.guild)}
-${getBoss(channel.guild)}
-${getBoss(channel.guild)}
-${getBoss(channel.guild)}
+${getBossList(channel.guild)}
+
 ────────────────────────────
 
 👨‍⚕️ EQUIPE EM SERVIÇO
@@ -175,7 +181,7 @@ ${list}
   } catch (e) {}
 }
 
-// 🎯 INTERAÇÕES
+// 🎯 INTERAÇÕES (COMANDOS)
 client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
@@ -187,7 +193,6 @@ client.on("interactionCreate", async (interaction) => {
 
   const user = interaction.options.getUser("usuario");
 
-  // PAINEL
   if (interaction.commandName === "painelhp") {
     const canal = interaction.options.getChannel("canal");
     const logs = interaction.options.getChannel("logs");
@@ -221,38 +226,26 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
-  // ADD HORA
   if (interaction.commandName === "addhora") {
     const h = interaction.options.getInteger("horas") * 3600000;
-
     ranking.set(user.id, (ranking.get(user.id) || 0) + h);
 
-    return interaction.reply({
-      content: "✅ Horas adicionadas!",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "✅ Horas adicionadas!", ephemeral: true });
   }
 
-  // REMOVE HORA
   if (interaction.commandName === "removerhora") {
     const h = interaction.options.getInteger("horas") * 3600000;
-
     ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - h));
 
-    return interaction.reply({
-      content: "❌ Horas removidas!",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "❌ Horas removidas!", ephemeral: true });
   }
 
-  // RESET
   if (interaction.commandName === "resethp") {
     pontos.clear();
     ranking.clear();
     return interaction.reply({ content: "♻️ Sistema resetado!", ephemeral: true });
   }
 
-  // RANKING
   if (interaction.commandName === "rankinghp") {
     const top = [...ranking.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -289,7 +282,6 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const time = Date.now() - p.inicio;
-
     ranking.set(id, (ranking.get(id) || 0) + time);
     pontos.delete(id);
 
