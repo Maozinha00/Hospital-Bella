@@ -52,17 +52,18 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
-// 👑 RESPONSÁVEIS EM SERVIÇO (USANDO HIERARQUIA)
+// 👑 RESPONSÁVEIS
 function getBossList(guild) {
   return HIERARQUIA
     .map(roleData => {
       const role = guild.roles.cache.get(roleData.id);
 
-      if (!role) {
+      if (!role || role.members.size === 0) {
         return `👑 Nenhum • ${roleData.nome}`;
       }
 
-      const member = role.members.first();
+      const members = [...role.members.values()];
+      const member = members.find(m => m.presence?.status !== "offline") || members[0];
 
       if (!member) {
         return `👑 Nenhum • ${roleData.nome}`;
@@ -73,7 +74,7 @@ function getBossList(guild) {
     .join("\n");
 }
 
-// 🧠 FUNÇÕES
+// 🔐 STAFF CHECK
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
@@ -111,7 +112,19 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("rankinghp")
-  .setDescription("Ver ranking")
+  .setDescription("Ver ranking"),
+
+new SlashCommandBuilder()
+  .setName("forcar_entrar")
+  .setDescription("STAFF: colocar usuário em serviço")
+  .addUserOption(o =>
+    o.setName("usuario").setDescription("Usuário").setRequired(true)),
+
+new SlashCommandBuilder()
+  .setName("forcar_sair")
+  .setDescription("STAFF: tirar usuário do serviço e salvar tempo")
+  .addUserOption(o =>
+    o.setName("usuario").setDescription("Usuário").setRequired(true))
 
 ].map(c => c.toJSON());
 
@@ -147,9 +160,9 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-#🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
+# ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
 ** 👑 RESPONSÁVEL DO PLANTÃO **
 ${getBossList(channel.guild)}
@@ -168,10 +181,10 @@ ${list}
 ────────────────────────────
 
 ** 🚨 OBSERVAÇÕES
-• Sistema automático de controle de plantão
-• Registro de horas em tempo real
-• Ranking atualizado continuamente
-• ⚠️ Não deixe o ponto aberto, pode zerar as horas **
+• Sistema automático de controle de plantão  
+• Registro de horas em tempo real  
+• Ranking atualizado continuamente  
+• ⚠️ Evita perda de ponto esquecido **
 
 🏥 Hospital Bella • Sistema Profissional
 `);
@@ -181,7 +194,7 @@ ${list}
   } catch (e) {}
 }
 
-// 🎯 INTERAÇÕES (COMANDOS)
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.isChatInputCommand()) return;
@@ -193,6 +206,7 @@ client.on("interactionCreate", async (interaction) => {
 
   const user = interaction.options.getUser("usuario");
 
+  // PAINEL
   if (interaction.commandName === "painelhp") {
     const canal = interaction.options.getChannel("canal");
     const logs = interaction.options.getChannel("logs");
@@ -226,6 +240,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
+  // ADD HORA
   if (interaction.commandName === "addhora") {
     const h = interaction.options.getInteger("horas") * 3600000;
     ranking.set(user.id, (ranking.get(user.id) || 0) + h);
@@ -233,6 +248,7 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Horas adicionadas!", ephemeral: true });
   }
 
+  // REMOVE HORA
   if (interaction.commandName === "removerhora") {
     const h = interaction.options.getInteger("horas") * 3600000;
     ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - h));
@@ -240,12 +256,14 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "❌ Horas removidas!", ephemeral: true });
   }
 
+  // RESET
   if (interaction.commandName === "resethp") {
     pontos.clear();
     ranking.clear();
     return interaction.reply({ content: "♻️ Sistema resetado!", ephemeral: true });
   }
 
+  // RANKING
   if (interaction.commandName === "rankinghp") {
     const top = [...ranking.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -259,6 +277,39 @@ client.on("interactionCreate", async (interaction) => {
           .setDescription(top || "Sem dados")
           .setColor("#0f172a")
       ]
+    });
+  }
+
+  // 🟢 FORÇAR ENTRAR
+  if (interaction.commandName === "forcar_entrar") {
+    if (pontos.has(user.id)) {
+      return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
+    }
+
+    pontos.set(user.id, { inicio: Date.now() });
+
+    return interaction.reply({
+      content: `🟢 ${user} colocado em serviço`,
+      ephemeral: true
+    });
+  }
+
+  // 🔴 FORÇAR SAIR
+  if (interaction.commandName === "forcar_sair") {
+    const p = pontos.get(user.id);
+
+    if (!p) {
+      return interaction.reply({ content: "❌ Usuário não está em serviço", ephemeral: true });
+    }
+
+    const time = Date.now() - p.inicio;
+
+    ranking.set(user.id, (ranking.get(user.id) || 0) + time);
+    pontos.delete(user.id);
+
+    return interaction.reply({
+      content: `🔴 ${user} removido do serviço • ${format(time)}`,
+      ephemeral: true
     });
   }
 });
@@ -282,6 +333,7 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const time = Date.now() - p.inicio;
+
     ranking.set(id, (ranking.get(id) || 0) + time);
     pontos.delete(id);
 
