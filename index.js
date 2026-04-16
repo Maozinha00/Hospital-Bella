@@ -82,7 +82,7 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("resethp")
-  .setDescription("Resetar sistema"),
+  .setDescription("Reset sistema"),
 
 new SlashCommandBuilder()
   .setName("rankinghp")
@@ -90,13 +90,13 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("forcar_entrar")
-  .setDescription("STAFF: colocar usuário em serviço")
+  .setDescription("STAFF: colocar em serviço")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("forcar_sair")
-  .setDescription("STAFF: retirar usuário do serviço")
+  .setDescription("STAFF: tirar do serviço")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
 
@@ -114,7 +114,7 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL
+// 🏥 PAINEL UPDATE
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -131,19 +131,21 @@ async function updatePanel() {
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
+      .setTitle("🏥 HOSPITAL BELLA")
       .setDescription(
-`🏥 HOSPITAL BELLA
+`🟢 SISTEMA ATIVO
 
 👨‍⚕️ EM SERVIÇO
-${list || "Nenhum médico ativo"}
+${list || "Nenhum médico online"}
 
-👥 Total: ${pontos.size}
+────────────────
+👥 Total ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>`
       );
 
     await msg.edit({ embeds: [embed] });
 
-  } catch (e) {}
+  } catch {}
 }
 
 // 🎯 COMMANDS
@@ -158,7 +160,7 @@ client.on("interactionCreate", async (interaction) => {
 
   const user = interaction.options.getUser("usuario");
 
-  // PAINEL
+  // 🏥 PAINEL
   if (interaction.commandName === "painelhp") {
     const canal = interaction.options.getChannel("canal");
     const logs = interaction.options.getChannel("logs");
@@ -171,7 +173,6 @@ client.on("interactionCreate", async (interaction) => {
         .setCustomId("iniciar")
         .setLabel("🟢 Iniciar")
         .setStyle(ButtonStyle.Success),
-
       new ButtonBuilder()
         .setCustomId("finalizar")
         .setLabel("🔴 Finalizar")
@@ -179,7 +180,12 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     const msg = await canal.send({
-      embeds: [new EmbedBuilder().setDescription("🏥 Painel Hospital ativo")],
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#0f172a")
+          .setTitle("🏥 PAINEL HOSPITAL")
+          .setDescription("🟢 Sistema iniciado com sucesso")
+      ],
       components: [row]
     });
 
@@ -233,14 +239,19 @@ client.on("interactionCreate", async (interaction) => {
       .join("\n");
 
     return interaction.reply({
-      embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("🏆 Ranking Hospital")
+          .setDescription(top || "Sem dados")
+          .setColor("#0f172a")
+      ]
     });
   }
 
   // 🟢 FORÇAR ENTRAR
   if (interaction.commandName === "forcar_entrar") {
     if (pontos.has(user.id)) {
-      return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
+      return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
     }
 
     pontos.set(user.id, { inicio: Date.now() });
