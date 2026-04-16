@@ -46,7 +46,7 @@ function format(ms) {
 
 // 🔐 STAFF CHECK
 function isStaff(member) {
-  return member.roles.cache.has(STAFF_ROLE);
+  return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
 // 📌 COMMANDS
@@ -62,7 +62,7 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("addhora")
-  .setDescription("Adicionar tempo a um usuário")
+  .setDescription("Adicionar tempo")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
@@ -72,7 +72,7 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("removerhora")
-  .setDescription("Remover tempo de um usuário")
+  .setDescription("Remover tempo")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
@@ -86,7 +86,7 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("rankinghp")
-  .setDescription("Ver ranking de horas"),
+  .setDescription("Ver ranking"),
 
 new SlashCommandBuilder()
   .setName("forcar_entrar")
@@ -114,53 +114,75 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL UPDATE
+// 🏥 PAINEL UPDATE (BONITO)
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
 
     const channel = await client.channels.fetch(config.painel);
-    const msg = await channel.messages.fetch(config.msgId);
+    if (!channel) return;
+
+    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
+    if (!msg) return;
 
     let list = "";
 
     for (const [id, data] of pontos) {
+      if (!data?.inicio) continue;
       const time = Date.now() - data.inicio;
       list += `👨‍⚕️ <@${id}> • ${format(time)}\n`;
     }
+
+    if (!list) list = "👨‍⚕️ Nenhum médico em serviço no momento";
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setTitle("🏥 HOSPITAL BELLA")
       .setDescription(
-`🟢 SISTEMA ATIVO
+`🏥 **HOSPITAL BELLA - SISTEMA DE PLANTÃO**
 
-👨‍⚕️ EM SERVIÇO
-${list || "Nenhum médico online"}
+🟢 **STATUS DO SISTEMA:** ONLINE
 
-────────────────
-👥 Total ativos: ${pontos.size}
-🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>`
+━━━━━━━━━━━━━━━━━━━━━━
+
+👨‍⚕️ **MÉDICOS EM SERVIÇO**
+${list}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 **INFORMAÇÕES DO PLANTÃO**
+👥 Total ativos: **${pontos.size}**
+⏱ Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **REGRAS RÁPIDAS**
+• Use o botão para iniciar e finalizar plantão  
+• Não deixe o ponto aberto  
+• Staff pode corrigir horários  
+
+🏥 Hospital Bella • Sistema de Controle`
       );
 
     await msg.edit({ embeds: [embed] });
 
-  } catch {}
+  } catch (e) {
+    console.log("Erro painel:", e.message);
+  }
 }
 
 // 🎯 COMMANDS
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  const member = await interaction.guild.members.fetch(interaction.user.id);
-
+  const member = interaction.member;
   if (!isStaff(member)) {
     return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
   }
 
   const user = interaction.options.getUser("usuario");
 
-  // 🏥 PAINEL
+  // PAINEL
   if (interaction.commandName === "painelhp") {
     const canal = interaction.options.getChannel("canal");
     const logs = interaction.options.getChannel("logs");
@@ -235,6 +257,7 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "rankinghp") {
     const top = [...ranking.entries()]
       .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
       .map(([id, t]) => `<@${id}> • ${format(t)}`)
       .join("\n");
 
@@ -257,7 +280,7 @@ client.on("interactionCreate", async (interaction) => {
     pontos.set(user.id, { inicio: Date.now() });
 
     return interaction.reply({
-      content: `🟢 ${user} colocado em serviço`,
+      content: `🟢 ${user} entrou em serviço`,
       ephemeral: true
     });
   }
@@ -295,10 +318,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "finalizar") {
     const p = pontos.get(id);
-
-    if (!p) {
-      return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
-    }
+    if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
 
     const time = Date.now() - p.inicio;
 
