@@ -59,13 +59,24 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
+// ✅ FIX: sem duplicar usuários em cargos
 function getBossList(guild) {
+  const usados = new Set();
+
   return HIERARQUIA.map(r => {
     const role = guild.roles.cache.get(r.id);
+
     if (!role) return `👑 Nenhum • ${r.nome}`;
-    const m = role.members.first();
-    if (!m) return `👑 Nenhum • ${r.nome}`;
-    return `👑 <@${m.id}> • ${r.nome}`;
+
+    const member = role.members
+      .filter(m => !usados.has(m.id))
+      .first();
+
+    if (!member) return `👑 Nenhum • ${r.nome}`;
+
+    usados.add(member.id);
+
+    return `👑 <@${member.id}> • ${r.nome}`;
   }).join("\n");
 }
 
@@ -168,14 +179,14 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO** 
+** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO **
 
-** 👑 RESPONSÁVEL DO PLANTÃO**
+** 👑 RESPONSÁVEL DO PLANTÃO **
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-👨‍⚕️ EQUIPE EM SERVIÇO
+** 👨‍⚕️ EQUIPE EM SERVIÇO **
 ${list}
 
 ────────────────────────────
@@ -185,28 +196,31 @@ ${list}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
-** 🚨 OBSERVAÇÕES
+**🚨 OBSERVAÇÕES
 • Sistema automático de controle de plantão
 • Registro de horas em tempo real
 • Ranking atualizado continuamente
-• ⚠️ Não deixe o ponto aberto, pode zerar as horas **
+• Não deixe o ponto aberto **
 
 🏥 Hospital Bella • Sistema Profissional
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
 
-  } catch {}
+  } catch (err) {
+    console.log("Erro painel:", err.message);
+  }
 }
 
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
-  // COMANDOS
   if (interaction.isChatInputCommand()) {
 
     const member = interaction.member;
-    if (!isStaff(member)) return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
+    if (!isStaff(member)) {
+      return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
+    }
 
     const user = interaction.options.getUser("usuario");
 
@@ -267,7 +281,6 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
-  // BOTÕES
   if (interaction.isButton()) {
 
     const id = interaction.user.id;
@@ -276,7 +289,6 @@ client.on("interactionCreate", async (interaction) => {
       if (pontos.has(id)) return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
 
       pontos.set(id, { inicio: Date.now() });
-
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
