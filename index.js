@@ -143,7 +143,11 @@ async function updatePanel() {
 
 👑 RESPONSÁVEL DO PLANTÃO
 ${getBoss(channel.guild)}
-
+${getBoss(channel.guild)}
+${getBoss(channel.guild)}
+${getBoss(channel.guild)}
+${getBoss(channel.guild)}
+${getBoss(channel.guild)}
 ────────────────────────────
 
 👨‍⚕️ EQUIPE EM SERVIÇO
