@@ -14,10 +14,10 @@ import {
 
 // 🌐 KEEP ALIVE
 const app = express();
-app.get("/", (req, res) => res.send("Bot online 🔥"));
+app.get("/", (_, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
-// 🔐 ENV
+// 🔐 CONFIG ENV
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -44,7 +44,26 @@ function format(ms) {
   return `${h}h ${m}m`;
 }
 
-// 🔐 STAFF CHECK
+// 👑 HIERARQUIA
+const HIERARQUIA = [
+  { id: "1477683902121509018", nome: "Diretor" },
+  { id: "1477683902121509017", nome: "Vice Diretor" },
+  { id: "1477683902121509016", nome: "Supervisor" },
+  { id: "1477683902121509015", nome: "Coordenador" }
+];
+
+// 🧠 FUNÇÕES
+function getBoss(guild) {
+  for (const roleData of HIERARQUIA) {
+    const role = guild.roles.cache.get(roleData.id);
+    if (role && role.members.size > 0) {
+      const user = role.members.first();
+      return `<@${user.id}> • ${roleData.nome}`;
+    }
+  }
+  return "Nenhum";
+}
+
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
@@ -62,23 +81,19 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("addhora")
-  .setDescription("Adicionar tempo")
+  .setDescription("Adicionar horas")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas").setRequired(false))
-  .addIntegerOption(o =>
-    o.setName("minutos").setDescription("Minutos").setRequired(false)),
+    o.setName("horas").setDescription("Horas").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("removerhora")
-  .setDescription("Remover tempo")
+  .setDescription("Remover horas")
   .addUserOption(o =>
     o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas").setRequired(false))
-  .addIntegerOption(o =>
-    o.setName("minutos").setDescription("Minutos").setRequired(false)),
+    o.setName("horas").setDescription("Horas").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("resethp")
@@ -86,25 +101,13 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
   .setName("rankinghp")
-  .setDescription("Ver ranking"),
-
-new SlashCommandBuilder()
-  .setName("forcar_entrar")
-  .setDescription("STAFF: colocar em serviço")
-  .addUserOption(o =>
-    o.setName("usuario").setDescription("Usuário").setRequired(true)),
-
-new SlashCommandBuilder()
-  .setName("forcar_sair")
-  .setDescription("STAFF: tirar do serviço")
-  .addUserOption(o =>
-    o.setName("usuario").setDescription("Usuário").setRequired(true))
+  .setDescription("Ver ranking")
 
 ].map(c => c.toJSON());
 
 // 🔥 READY
 client.once("ready", async () => {
-  console.log(`🔥 Bot online: ${client.user.tag}`);
+  console.log(`🔥 ${client.user.tag} online`);
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -114,65 +117,62 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL UPDATE (BONITO)
+// 🏥 PAINEL UPDATE
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
 
     const channel = await client.channels.fetch(config.painel);
-    if (!channel) return;
-
-    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
-    if (!msg) return;
+    const msg = await channel.messages.fetch(config.msgId);
 
     let list = "";
 
     for (const [id, data] of pontos) {
-      if (!data?.inicio) continue;
       const time = Date.now() - data.inicio;
       list += `👨‍⚕️ <@${id}> • ${format(time)}\n`;
     }
 
-    if (!list) list = "👨‍⚕️ Nenhum médico em serviço no momento";
+    if (!list) list = "- Nenhum médico em serviço no momento";
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
-      .setTitle("🏥 HOSPITAL BELLA")
-      .setDescription(
-`🏥 **HOSPITAL BELLA - SISTEMA DE PLANTÃO**
+      .setDescription(`
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-🟢 **STATUS DO SISTEMA:** ONLINE
+✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
-━━━━━━━━━━━━━━━━━━━━━━
+👑 RESPONSÁVEL DO PLANTÃO
+${getBoss(channel.guild)}
 
-👨‍⚕️ **MÉDICOS EM SERVIÇO**
+────────────────────────────
+
+👨‍⚕️ EQUIPE EM SERVIÇO
 ${list}
 
-━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────
 
-📊 **INFORMAÇÕES DO PLANTÃO**
-👥 Total ativos: **${pontos.size}**
-⏱ Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
+📊 STATUS DO SISTEMA
+👥 Médicos ativos: ${pontos.size}
+🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
-━━━━━━━━━━━━━━━━━━━━━━
+────────────────────────────
 
-🚨 **REGRAS RÁPIDAS**
-• Use o botão para iniciar e finalizar plantão  
-• Não deixe o ponto aberto  
-• Staff pode corrigir horários  
+🚨 OBSERVAÇÕES
+• Sistema automático de controle de plantão  
+• Registro de horas em tempo real  
+• Ranking atualizado continuamente  
 
-🏥 Hospital Bella • Sistema de Controle`
-      );
+🏥 Hospital Bella • Sistema Profissional
+`);
 
     await msg.edit({ embeds: [embed] });
 
-  } catch (e) {
-    console.log("Erro painel:", e.message);
-  }
+  } catch (e) {}
 }
 
-// 🎯 COMMANDS
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
+
   if (!interaction.isChatInputCommand()) return;
 
   const member = interaction.member;
@@ -216,32 +216,26 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
   }
 
-  // ➕ ADD TEMPO
+  // ADD HORA
   if (interaction.commandName === "addhora") {
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
+    const h = interaction.options.getInteger("horas") * 3600000;
 
-    const tempo = (h * 3600000) + (m * 60000);
-
-    ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+    ranking.set(user.id, (ranking.get(user.id) || 0) + h);
 
     return interaction.reply({
-      content: `✅ Adicionado: ${h}h ${m}m`,
+      content: "✅ Horas adicionadas!",
       ephemeral: true
     });
   }
 
-  // ➖ REMOVE TEMPO
+  // REMOVE HORA
   if (interaction.commandName === "removerhora") {
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
+    const h = interaction.options.getInteger("horas") * 3600000;
 
-    const tempo = (h * 3600000) + (m * 60000);
-
-    ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
+    ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - h));
 
     return interaction.reply({
-      content: `❌ Removido: ${h}h ${m}m`,
+      content: "❌ Horas removidas!",
       ephemeral: true
     });
   }
@@ -257,7 +251,6 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "rankinghp") {
     const top = [...ranking.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
       .map(([id, t]) => `<@${id}> • ${format(t)}`)
       .join("\n");
 
@@ -268,39 +261,6 @@ client.on("interactionCreate", async (interaction) => {
           .setDescription(top || "Sem dados")
           .setColor("#0f172a")
       ]
-    });
-  }
-
-  // 🟢 FORÇAR ENTRAR
-  if (interaction.commandName === "forcar_entrar") {
-    if (pontos.has(user.id)) {
-      return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
-    }
-
-    pontos.set(user.id, { inicio: Date.now() });
-
-    return interaction.reply({
-      content: `🟢 ${user} entrou em serviço`,
-      ephemeral: true
-    });
-  }
-
-  // 🔴 FORÇAR SAIR
-  if (interaction.commandName === "forcar_sair") {
-    const p = pontos.get(user.id);
-
-    if (!p) {
-      return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
-    }
-
-    const time = Date.now() - p.inicio;
-
-    ranking.set(user.id, (ranking.get(user.id) || 0) + time);
-    pontos.delete(user.id);
-
-    return interaction.reply({
-      content: `🔴 ${user} saiu • ${format(time)}`,
-      ephemeral: true
     });
   }
 });
@@ -318,7 +278,10 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.customId === "finalizar") {
     const p = pontos.get(id);
-    if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
+
+    if (!p) {
+      return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
+    }
 
     const time = Date.now() - p.inicio;
 
