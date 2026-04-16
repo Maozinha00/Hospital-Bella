@@ -168,9 +168,9 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
+** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO** 
 
-👑 RESPONSÁVEL DO PLANTÃO
+** 👑 RESPONSÁVEL DO PLANTÃO**
 ${getBossList(channel.guild)}
 
 ────────────────────────────
@@ -185,6 +185,11 @@ ${list}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
+** 🚨 OBSERVAÇÕES
+• Sistema automático de controle de plantão
+• Registro de horas em tempo real
+• Ranking atualizado continuamente
+• ⚠️ Não deixe o ponto aberto, pode zerar as horas **
 
 🏥 Hospital Bella • Sistema Profissional
 `);
