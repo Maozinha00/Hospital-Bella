@@ -17,7 +17,7 @@ const app = express();
 app.get("/", (req, res) => res.send("Bot online 🔥"));
 app.listen(3000);
 
-// 🔐 CONFIG
+// 🔐 ENV
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -37,7 +37,7 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ⏱ FORMATADOR (HORAS + MINUTOS)
+// ⏱ FORMAT
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
@@ -49,62 +49,62 @@ function isStaff(member) {
   return member.roles.cache.has(STAFF_ROLE);
 }
 
-// 📌 COMANDOS
+// 📌 COMMANDS
 const commands = [
 
 new SlashCommandBuilder()
   .setName("painelhp")
   .setDescription("Criar painel hospital")
   .addChannelOption(o =>
-    o.setName("canal").setDescription("Canal painel").setRequired(true))
+    o.setName("canal").setDescription("Canal do painel").setRequired(true))
   .addChannelOption(o =>
-    o.setName("logs").setDescription("Canal logs").setRequired(true)),
+    o.setName("logs").setDescription("Canal de logs").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("addhora")
-  .setDescription("Adicionar tempo")
+  .setDescription("Adicionar tempo a um usuário")
   .addUserOption(o =>
-    o.setName("usuario").setRequired(true))
+    o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas"))
+    o.setName("horas").setDescription("Horas").setRequired(false))
   .addIntegerOption(o =>
-    o.setName("minutos").setDescription("Minutos")),
+    o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
 new SlashCommandBuilder()
   .setName("removerhora")
-  .setDescription("Remover tempo")
+  .setDescription("Remover tempo de um usuário")
   .addUserOption(o =>
-    o.setName("usuario").setRequired(true))
+    o.setName("usuario").setDescription("Usuário").setRequired(true))
   .addIntegerOption(o =>
-    o.setName("horas").setDescription("Horas"))
+    o.setName("horas").setDescription("Horas").setRequired(false))
   .addIntegerOption(o =>
-    o.setName("minutos").setDescription("Minutos")),
+    o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
 new SlashCommandBuilder()
   .setName("resethp")
-  .setDescription("Reset sistema"),
+  .setDescription("Resetar sistema"),
 
 new SlashCommandBuilder()
   .setName("rankinghp")
-  .setDescription("Ver ranking"),
+  .setDescription("Ver ranking de horas"),
 
 new SlashCommandBuilder()
   .setName("forcar_entrar")
-  .setDescription("STAFF: colocar em serviço")
+  .setDescription("STAFF: colocar usuário em serviço")
   .addUserOption(o =>
-    o.setName("usuario").setRequired(true)),
+    o.setName("usuario").setDescription("Usuário").setRequired(true)),
 
 new SlashCommandBuilder()
   .setName("forcar_sair")
-  .setDescription("STAFF: tirar do serviço")
+  .setDescription("STAFF: retirar usuário do serviço")
   .addUserOption(o =>
-    o.setName("usuario").setRequired(true))
+    o.setName("usuario").setDescription("Usuário").setRequired(true))
 
 ].map(c => c.toJSON());
 
 // 🔥 READY
 client.once("ready", async () => {
-  console.log(`🔥 ${client.user.tag} online`);
+  console.log(`🔥 Bot online: ${client.user.tag}`);
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -132,18 +132,18 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(
-`🏥 ═══ HOSPITAL BELLA ═══
+`🏥 HOSPITAL BELLA
 
 👨‍⚕️ EM SERVIÇO
-${list || "Nenhum"}
+${list || "Nenhum médico ativo"}
 
-👥 Ativos: ${pontos.size}
+👥 Total: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>`
       );
 
     await msg.edit({ embeds: [embed] });
 
-  } catch {}
+  } catch (e) {}
 }
 
 // 🎯 COMMANDS
@@ -179,7 +179,7 @@ client.on("interactionCreate", async (interaction) => {
     );
 
     const msg = await canal.send({
-      embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo")],
+      embeds: [new EmbedBuilder().setDescription("🏥 Painel Hospital ativo")],
       components: [row]
     });
 
@@ -203,7 +203,7 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // ➖ REMOVER TEMPO
+  // ➖ REMOVE TEMPO
   if (interaction.commandName === "removerhora") {
     const h = interaction.options.getInteger("horas") || 0;
     const m = interaction.options.getInteger("minutos") || 0;
@@ -222,7 +222,7 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.commandName === "resethp") {
     pontos.clear();
     ranking.clear();
-    return interaction.reply({ content: "♻️ Resetado!", ephemeral: true });
+    return interaction.reply({ content: "♻️ Sistema resetado!", ephemeral: true });
   }
 
   // RANKING
@@ -240,13 +240,13 @@ client.on("interactionCreate", async (interaction) => {
   // 🟢 FORÇAR ENTRAR
   if (interaction.commandName === "forcar_entrar") {
     if (pontos.has(user.id)) {
-      return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
+      return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
     }
 
     pontos.set(user.id, { inicio: Date.now() });
 
     return interaction.reply({
-      content: `🟢 ${user} entrou em serviço`,
+      content: `🟢 ${user} colocado em serviço`,
       ephemeral: true
     });
   }
