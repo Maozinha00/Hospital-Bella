@@ -39,7 +39,7 @@ const ranking = new Map();
 
 // 🚀 CLIENT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -114,16 +114,16 @@ const commands = [
     .setDescription("Adicionar tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o => o.setName("minutos").setDescription("Minutos")),
+    .addIntegerOption(o => o.setName("horas"))
+    .addIntegerOption(o => o.setName("minutos")),
 
   new SlashCommandBuilder()
     .setName("removerhora")
     .setDescription("Remover tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o => o.setName("minutos").setDescription("Minutos")),
+    .addIntegerOption(o => o.setName("horas"))
+    .addIntegerOption(o => o.setName("minutos")),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
@@ -133,13 +133,13 @@ const commands = [
     .setName("forcar_entrar")
     .setDescription("Colocar em serviço")
     .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)),
+      o.setName("usuario").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("forcar_sair")
     .setDescription("Retirar do serviço")
     .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
+      o.setName("usuario").setRequired(true))
 ].map(c => c.toJSON());
 
 // 🔥 READY
@@ -154,7 +154,7 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL (NÃO ALTEREI SUA DESCRIÇÃO)
+// 🏥 PAINEL
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -193,12 +193,6 @@ ${list}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
-**🚨 OBSERVAÇÕES
-• Sistema automático de controle de plantão
-• Registro de horas em tempo real
-• Ranking atualizado continuamente
-• Não deixe o ponto aberto **
-
 🏥 Hospital Bella • Sistema Profissional
 `);
 
@@ -211,120 +205,101 @@ ${list}
 
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
+  try {
 
-  if (interaction.isChatInputCommand()) {
+    if (interaction.isChatInputCommand()) {
+      const member = interaction.member;
 
-    const member = interaction.member;
-    if (!isStaff(member)) {
-      return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
-    }
-
-    const user = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
-    const tempo = (h * 3600000) + (m * 60000);
-
-    if (interaction.commandName === "painelhp") {
-      const canal = interaction.options.getChannel("canal");
-
-      config.painel = canal.id;
-
-      const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#0f172a")],
-        components: [row()]
-      });
-
-      config.msgId = msg.id;
-
-      return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "addhora") {
-      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
-      return interaction.reply({ content: "✅ Adicionado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "removerhora") {
-      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
-      return interaction.reply({ content: "❌ Removido!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
-        .sort((a,b) => b[1]-a[1])
-        .map(([id,t]) => `<@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
-      });
-    }
-
-    if (interaction.commandName === "forcar_entrar") {
-      pontos.set(user.id, { inicio: Date.now() });
-
-      const m = interaction.guild.members.cache.get(user.id);
-      if (m) {
-        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      if (!isStaff(member)) {
+        return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
       }
 
-      return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
-    }
+      const user = interaction.options.getUser("usuario");
+      const h = interaction.options.getInteger("horas") || 0;
+      const m = interaction.options.getInteger("minutos") || 0;
+      const tempo = (h * 3600000) + (m * 60000);
 
-    if (interaction.commandName === "forcar_sair") {
-      const p = pontos.get(user.id);
-      if (!p) return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
+      if (interaction.commandName === "painelhp") {
+        const canal = interaction.options.getChannel("canal");
 
-      const time = Date.now() - p.inicio;
-      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
-      pontos.delete(user.id);
+        config.painel = canal.id;
 
-      const m = interaction.guild.members.cache.get(user.id);
-      if (m) {
-        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+        const msg = await canal.send({
+          embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#0f172a")],
+          components: [row()]
+        });
+
+        config.msgId = msg.id;
+
+        return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
       }
 
-      return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
-    }
-  }
-
-  if (interaction.isButton()) {
-
-    const id = interaction.user.id;
-
-    if (interaction.customId === "iniciar") {
-      if (pontos.has(id)) return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
-
-      pontos.set(id, { inicio: Date.now() });
-
-      const m = interaction.guild.members.cache.get(id);
-      if (m) {
-        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      if (interaction.commandName === "addhora") {
+        ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+        return interaction.reply({ content: "✅ Adicionado!", ephemeral: true });
       }
 
-      return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
-    }
-
-    if (interaction.customId === "finalizar") {
-      const p = pontos.get(id);
-      if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
-
-      const time = Date.now() - p.inicio;
-
-      ranking.set(id, (ranking.get(id) || 0) + time);
-      pontos.delete(id);
-
-      const m = interaction.guild.members.cache.get(id);
-      if (m) {
-        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      if (interaction.commandName === "removerhora") {
+        ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
+        return interaction.reply({ content: "❌ Removido!", ephemeral: true });
       }
 
-      return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, ephemeral: true });
+      if (interaction.commandName === "rankinghp") {
+        const top = [...ranking.entries()]
+          .sort((a,b) => b[1]-a[1])
+          .map(([id,t]) => `<@${id}> • ${format(t)}`)
+          .join("\n");
+
+        return interaction.reply({
+          embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
+        });
+      }
+
+      if (interaction.commandName === "forcar_entrar") {
+        pontos.set(user.id, { inicio: Date.now() });
+        return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
+      }
+
+      if (interaction.commandName === "forcar_sair") {
+        const p = pontos.get(user.id);
+        if (!p) return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
+
+        const time = Date.now() - p.inicio;
+        ranking.set(user.id, (ranking.get(user.id) || 0) + time);
+        pontos.delete(user.id);
+
+        return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
+      }
     }
+
+    if (interaction.isButton()) {
+      const id = interaction.user.id;
+
+      if (interaction.customId === "iniciar") {
+        if (pontos.has(id)) {
+          return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
+        }
+
+        pontos.set(id, { inicio: Date.now() });
+        return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
+      }
+
+      if (interaction.customId === "finalizar") {
+        const p = pontos.get(id);
+        if (!p) {
+          return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
+        }
+
+        const time = Date.now() - p.inicio;
+        ranking.set(id, (ranking.get(id) || 0) + time);
+        pontos.delete(id);
+
+        return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, ephemeral: true });
+      }
+    }
+
+  } catch (err) {
+    console.log("Erro interação:", err);
   }
 });
 
