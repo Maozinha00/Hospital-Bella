@@ -152,8 +152,8 @@ async function updatePanel() {
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
-      .setDescription(`
-🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+      .setDescription(
+`🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
 ✨ **SISTEMA DE PLANTÃO ATIVO**
 
@@ -176,15 +176,15 @@ ${list}
 ━━━━━━━━━━━━━━━━━━━━━━
 
 🚨 **OBSERVAÇÕES IMPORTANTES**
-• Sistema automático de plantão  
-• Registro de horas em tempo real  
-• Ranking atualizado constantemente  
-• Evite deixar o ponto aberto  
+• Sistema automático de plantão
+• Registro de horas em tempo real
+• Ranking atualizado constantemente
+• Evite deixar o ponto aberto
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🏥 **Hospital Bella • Sistema Profissional**
-`);
+🏥 **Hospital Bella • Sistema Profissional**`
+      );
 
     await msg.edit({ embeds: [embed], components: [row()] });
 
@@ -196,7 +196,6 @@ ${list}
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
-  // 📌 COMANDOS
   if (interaction.isChatInputCommand()) {
 
     const member = interaction.member;
@@ -210,7 +209,7 @@ client.on("interactionCreate", async (interaction) => {
       config.painel = canal.id;
 
       const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#0f172a")],
+        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo")],
         components: [row()]
       });
 
@@ -235,10 +234,10 @@ client.on("interactionCreate", async (interaction) => {
 
       pontos.set(user.id, { inicio: Date.now() });
 
-      const member = interaction.guild.members.cache.get(user.id);
-      if (member) {
-        await member.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await member.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      const member2 = interaction.guild.members.cache.get(user.id);
+      if (member2) {
+        await member2.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await member2.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
@@ -254,17 +253,16 @@ client.on("interactionCreate", async (interaction) => {
       ranking.set(user.id, (ranking.get(user.id) || 0) + time);
       pontos.delete(user.id);
 
-      const member = interaction.guild.members.cache.get(user.id);
-      if (member) {
-        await member.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await member.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      const member2 = interaction.guild.members.cache.get(user.id);
+      if (member2) {
+        await member2.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await member2.roles.add(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
     }
   }
 
-  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     const id = interaction.user.id;
@@ -281,17 +279,6 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       return interaction.reply({ content: "🟢 Entrou em serviço!", ephemeral: true });
-    }
-    }
-
-    if (interaction.commandName === "addhora") {
-      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
-      return interaction.reply({ content: "✅ Adicionado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "removerhora") {
-      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
-      return interaction.reply({ content: "❌ Removido!", ephemeral: true });
     }
 
     if (interaction.customId === "finalizar") {
