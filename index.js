@@ -282,6 +282,17 @@ client.on("interactionCreate", async (interaction) => {
 
       return interaction.reply({ content: "🟢 Entrou em serviço!", ephemeral: true });
     }
+    }
+
+    if (interaction.commandName === "addhora") {
+      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+      return interaction.reply({ content: "✅ Adicionado!", ephemeral: true });
+    }
+
+    if (interaction.commandName === "removerhora") {
+      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
+      return interaction.reply({ content: "❌ Removido!", ephemeral: true });
+    }
 
     if (interaction.customId === "finalizar") {
       const p = pontos.get(id);
