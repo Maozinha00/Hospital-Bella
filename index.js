@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
+import { QuickDB } from "quick.db";
 import {
   Client,
   GatewayIntentBits,
@@ -23,7 +22,7 @@ app.listen(3000);
 const { TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.log("❌ Falta configurar .env");
+  console.log("❌ Configure o .env");
   process.exit(1);
 }
 
@@ -38,46 +37,25 @@ const CARGO_FORA_SERVICO = "1492553631642288160";
 let config = { painel: null, msgId: null };
 const pontos = new Map();
 
-// 🗄️ BANCO
-let db;
+// 🗄️ BANCO (QUICK.DB)
+const db = new QuickDB();
 
-async function initDB() {
-  db = await open({
-    filename: "./database.sqlite",
-    driver: sqlite3.Database
-  });
-
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS ranking (
-      userId TEXT PRIMARY KEY,
-      tempo INTEGER DEFAULT 0
-    );
-  `);
-
-  console.log("💾 Banco conectado");
-}
-
-// 📊 DB
+// 📊 FUNÇÕES DB
 async function addTempo(userId, tempo) {
-  const row = await db.get("SELECT * FROM ranking WHERE userId = ?", userId);
-
-  if (row) {
-    await db.run(
-      "UPDATE ranking SET tempo = tempo + ? WHERE userId = ?",
-      tempo,
-      userId
-    );
-  } else {
-    await db.run(
-      "INSERT INTO ranking (userId, tempo) VALUES (?, ?)",
-      userId,
-      tempo
-    );
-  }
+  const atual = await db.get(`tempo_${userId}`) || 0;
+  await db.set(`tempo_${userId}`, atual + tempo);
 }
 
 async function getRanking() {
-  return await db.all("SELECT * FROM ranking ORDER BY tempo DESC");
+  const all = await db.all();
+
+  return all
+    .filter(d => d.id.startsWith("tempo_"))
+    .map(d => ({
+      userId: d.id.replace("tempo_", ""),
+      tempo: d.value
+    }))
+    .sort((a, b) => b.tempo - a.tempo);
 }
 
 // 🚀 CLIENT
@@ -100,7 +78,7 @@ function tempoRelativo(ms) {
   return `há ${m} min`;
 }
 
-// 👑 HIERARQUIA (AGORA MOSTRA TODOS)
+// 👑 HIERARQUIA (MOSTRA TODOS)
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor" },
   { id: "1477683902121509017", nome: "Vice Diretor" },
@@ -156,8 +134,6 @@ const commands = [
 // 🔥 READY
 client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
-
-  await initDB();
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -236,9 +212,9 @@ client.on("interactionCreate", async (interaction) => {
     if (interaction.commandName === "rankinghp") {
       const data = await getRanking();
 
-      const top = data.map(r =>
-        `<@${r.userId}> • ${format(r.tempo)}`
-      ).join("\n");
+      const top = data
+        .map(r => `<@${r.userId}> • ${format(r.tempo)}`)
+        .join("\n");
 
       return interaction.reply({
         embeds: [
