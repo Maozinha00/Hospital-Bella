@@ -22,8 +22,15 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🛡️ STAFF ROLE
+if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.log("❌ Configure TOKEN, CLIENT_ID e GUILD_ID");
+  process.exit(1);
+}
+
+// 🛡️ CONFIG
 const STAFF_ROLE = "1490431614055088128";
+const ROLE_EM_SERVICO = "1492553421973356795";
+const ROLE_FORA_SERVICO = "1492553631642288160";
 
 // 🧠 SISTEMA
 let config = { painel: null, msgId: null };
@@ -59,23 +66,17 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
-// ✅ FIX: sem duplicar usuários em cargos
 function getBossList(guild) {
   const usados = new Set();
 
   return HIERARQUIA.map(r => {
     const role = guild.roles.cache.get(r.id);
-
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
-    const member = role.members
-      .filter(m => !usados.has(m.id))
-      .first();
-
+    const member = role.members.filter(m => !usados.has(m.id)).first();
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
-
     return `👑 <@${member.id}> • ${r.nome}`;
   }).join("\n");
 }
@@ -113,20 +114,16 @@ const commands = [
     .setDescription("Adicionar tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos")),
+    .addIntegerOption(o => o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o => o.setName("minutos").setDescription("Minutos")),
 
   new SlashCommandBuilder()
     .setName("removerhora")
     .setDescription("Remover tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos")),
+    .addIntegerOption(o => o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o => o.setName("minutos").setDescription("Minutos")),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
@@ -157,7 +154,7 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL
+// 🏥 PAINEL (NÃO ALTEREI SUA DESCRIÇÃO)
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -223,7 +220,6 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const user = interaction.options.getUser("usuario");
-
     const h = interaction.options.getInteger("horas") || 0;
     const m = interaction.options.getInteger("minutos") || 0;
     const tempo = (h * 3600000) + (m * 60000);
@@ -266,6 +262,13 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.commandName === "forcar_entrar") {
       pontos.set(user.id, { inicio: Date.now() });
+
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
       return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
     }
 
@@ -276,6 +279,12 @@ client.on("interactionCreate", async (interaction) => {
       const time = Date.now() - p.inicio;
       ranking.set(user.id, (ranking.get(user.id) || 0) + time);
       pontos.delete(user.id);
+
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      }
 
       return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
     }
@@ -289,6 +298,13 @@ client.on("interactionCreate", async (interaction) => {
       if (pontos.has(id)) return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
 
       pontos.set(id, { inicio: Date.now() });
+
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
@@ -300,6 +316,12 @@ client.on("interactionCreate", async (interaction) => {
 
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
+
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      }
 
       return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, ephemeral: true });
     }
