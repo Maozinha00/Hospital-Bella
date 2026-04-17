@@ -110,6 +110,26 @@ const commands = [
     .setDescription("Ver ranking"),
 
   new SlashCommandBuilder()
+    .setName("addhora")
+    .setDescription("Adicionar tempo")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos")),
+
+  new SlashCommandBuilder()
+    .setName("removerhora")
+    .setDescription("Remover tempo")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos")),
+
+  new SlashCommandBuilder()
     .setName("forcar_entrar")
     .setDescription("Colocar em serviço")
     .addUserOption(o =>
@@ -152,8 +172,8 @@ async function updatePanel() {
 
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
-      .setDescription(
-`🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+      .setDescription(`
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
 ✨ **SISTEMA DE PLANTÃO ATIVO**
 
@@ -176,15 +196,15 @@ ${list}
 ━━━━━━━━━━━━━━━━━━━━━━
 
 🚨 **OBSERVAÇÕES IMPORTANTES**
-• Sistema automático de plantão
-• Registro de horas em tempo real
-• Ranking atualizado constantemente
-• Evite deixar o ponto aberto
+• Sistema automático de plantão  
+• Registro de horas em tempo real  
+• Ranking atualizado constantemente  
+• Evite deixar o ponto aberto  
 
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🏥 **Hospital Bella • Sistema Profissional**`
-      );
+🏥 **Hospital Bella • Sistema Profissional**
+`);
 
     await msg.edit({ embeds: [embed], components: [row()] });
 
@@ -201,6 +221,34 @@ client.on("interactionCreate", async (interaction) => {
     const member = interaction.member;
     if (!isStaff(member)) {
       return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
+    }
+
+    // ADD HORA
+    if (interaction.commandName === "addhora") {
+      const user = interaction.options.getUser("usuario");
+      const h = interaction.options.getInteger("horas") || 0;
+      const m = interaction.options.getInteger("minutos") || 0;
+
+      const tempo = (h * 3600000) + (m * 60000);
+      if (tempo <= 0) return interaction.reply({ content: "❌ Tempo inválido", ephemeral: true });
+
+      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+
+      return interaction.reply({ content: `✅ Adicionado ${format(tempo)}`, ephemeral: true });
+    }
+
+    // REMOVER HORA
+    if (interaction.commandName === "removerhora") {
+      const user = interaction.options.getUser("usuario");
+      const h = interaction.options.getInteger("horas") || 0;
+      const m = interaction.options.getInteger("minutos") || 0;
+
+      const tempo = (h * 3600000) + (m * 60000);
+      if (tempo <= 0) return interaction.reply({ content: "❌ Tempo inválido", ephemeral: true });
+
+      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
+
+      return interaction.reply({ content: `❌ Removido ${format(tempo)}`, ephemeral: true });
     }
 
     if (interaction.commandName === "painelhp") {
@@ -234,10 +282,10 @@ client.on("interactionCreate", async (interaction) => {
 
       pontos.set(user.id, { inicio: Date.now() });
 
-      const member2 = interaction.guild.members.cache.get(user.id);
-      if (member2) {
-        await member2.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await member2.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
@@ -253,10 +301,10 @@ client.on("interactionCreate", async (interaction) => {
       ranking.set(user.id, (ranking.get(user.id) || 0) + time);
       pontos.delete(user.id);
 
-      const member2 = interaction.guild.members.cache.get(user.id);
-      if (member2) {
-        await member2.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await member2.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
@@ -272,10 +320,10 @@ client.on("interactionCreate", async (interaction) => {
 
       pontos.set(id, { inicio: Date.now() });
 
-      const member = interaction.guild.members.cache.get(id);
-      if (member) {
-        await member.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await member.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: "🟢 Entrou em serviço!", ephemeral: true });
@@ -290,10 +338,10 @@ client.on("interactionCreate", async (interaction) => {
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
-      const member = interaction.guild.members.cache.get(id);
-      if (member) {
-        await member.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await member.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
       }
 
       return interaction.reply({ content: `🔴 Saiu de serviço • ${format(time)}`, ephemeral: true });
