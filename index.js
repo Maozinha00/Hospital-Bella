@@ -22,9 +22,8 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🚨 VERIFICAÇÃO
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.log("❌ Configure TOKEN, CLIENT_ID e GUILD_ID no .env");
+  console.log("❌ Configure TOKEN, CLIENT_ID e GUILD_ID");
   process.exit(1);
 }
 
@@ -74,10 +73,7 @@ function getBossList(guild) {
     const role = guild.roles.cache.get(r.id);
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
-    const member = role.members
-      .filter(m => !usados.has(m.id))
-      .first();
-
+    const member = role.members.filter(m => !usados.has(m.id)).first();
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
@@ -157,21 +153,44 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 **HOSPITAL BELLA**
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-👑 **Responsáveis**
+✨ **SISTEMA DE PLANTÃO ATIVO**
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+👑 **RESPONSÁVEL PELO PLANTÃO**
 ${getBossList(channel.guild)}
 
-👨‍⚕️ **Em serviço**
+━━━━━━━━━━━━━━━━━━━━━━
+
+👨‍⚕️ **EQUIPE EM SERVIÇO**
 ${list}
 
-👥 Ativos: ${pontos.size}
-🕒 <t:${Math.floor(Date.now() / 1000)}:R>
+━━━━━━━━━━━━━━━━━━━━━━
+
+📊 **STATUS DO HOSPITAL**
+👥 Médicos ativos: **${pontos.size}**
+🕒 Última atualização: <t:${Math.floor(Date.now() / 1000)}:R>
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🚨 **OBSERVAÇÕES IMPORTANTES**
+• Sistema automático de plantão  
+• Registro de horas em tempo real  
+• Ranking atualizado constantemente  
+• Evite deixar o ponto aberto  
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🏥 **Hospital Bella • Sistema Profissional**
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
 
-  } catch {}
+  } catch (err) {
+    console.log("Erro painel:", err.message);
+  }
 }
 
 // 🎯 INTERAÇÕES
@@ -191,7 +210,7 @@ client.on("interactionCreate", async (interaction) => {
       config.painel = canal.id;
 
       const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo")],
+        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#0f172a")],
         components: [row()]
       });
 
