@@ -103,7 +103,6 @@ function row() {
   );
 }
 
-// ⚠️ RESET BOTÕES
 function resetRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -118,7 +117,7 @@ function resetRow() {
   );
 }
 
-// 📌 COMMANDS (🔥 CORRIGIDO COM DESCRIPTION EM TUDO)
+// 📌 COMMANDS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
@@ -133,9 +132,9 @@ const commands = [
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
     .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(false))
+      o.setName("horas").setDescription("Horas"))
     .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(false)),
+      o.setName("minutos").setDescription("Minutos")),
 
   new SlashCommandBuilder()
     .setName("removerhora")
@@ -143,13 +142,13 @@ const commands = [
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
     .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(false))
+      o.setName("horas").setDescription("Horas"))
     .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(false)),
+      o.setName("minutos").setDescription("Minutos")),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ver ranking do hospital"),
+    .setDescription("Ver ranking"),
 
   new SlashCommandBuilder()
     .setName("forcar_entrar")
@@ -168,8 +167,8 @@ const commands = [
     .setDescription("🚨 Reset total do sistema hospital")
 ].map(c => c.toJSON());
 
-// 🔥 READY
-client.once("ready", async () => {
+// 🔥 READY (ATUALIZADO)
+client.once("clientReady", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
   await rest.put(
@@ -200,17 +199,17 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+🏥 HOSPITAL BELLA
 
 👑 RESPONSÁVEL
 ${getBossList(channel.guild)}
 
-────────────────────────────
+──────────────────
 
 👨‍⚕️ EM SERVIÇO
 ${list}
 
-────────────────────────────
+──────────────────
 👥 Ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 `);
@@ -228,22 +227,20 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
 
     if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Sem permissão",
+        flags: 64
+      });
     }
 
     // 🚨 RESET
     if (interaction.commandName === "resetgeral") {
       return interaction.reply({
-        content: "⚠️ Tem certeza que deseja RESETAR TODO O SISTEMA?",
+        content: "⚠️ Confirmar reset total do sistema?",
         components: [resetRow()],
-        ephemeral: true
+        flags: 64
       });
     }
-
-    const user = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
-    const tempo = (h * 3600000) + (m * 60000);
 
     if (interaction.commandName === "rankinghp") {
       const top = [...ranking.entries()]
@@ -252,28 +249,30 @@ client.on("interactionCreate", async (interaction) => {
         .join("\n");
 
       return interaction.reply({
-        embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("🏆 Ranking")
+            .setDescription(top || "Sem dados")
+        ],
+        flags: 64
       });
     }
   }
 
-  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     const id = interaction.user.id;
 
+    // ❌ CANCELAR RESET
     if (interaction.customId === "cancel_reset") {
       return interaction.update({
-        content: "❌ Reset cancelado com segurança.",
+        content: "❌ Reset cancelado.",
         components: []
       });
     }
 
+    // 🚨 CONFIRMAR RESET
     if (interaction.customId === "confirm_reset") {
-
-      if (!interaction.member.roles.cache.has(STAFF_ROLE)) {
-        return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
-      }
 
       pontos.clear();
       ranking.clear();
@@ -286,39 +285,34 @@ client.on("interactionCreate", async (interaction) => {
           embeds: [
             new EmbedBuilder()
               .setColor("Red")
-              .setTitle("🚨 RESET GERAL EXECUTADO")
-              .setDescription(`
-🧠 Ranking zerado
-🏥 Plantões encerrados
-⚙️ Sistema reiniciado
-
-👤 Por: <@${id}>
-🕒 <t:${Math.floor(Date.now() / 1000)}:F>
-              `)
+              .setTitle("🚨 RESET EXECUTADO")
+              .setDescription(`Por: <@${id}>`)
           ]
         });
       }
 
       return interaction.update({
-        content: "🚨 RESET GERAL EXECUTADO COM SUCESSO!",
+        content: "🚨 RESET FINALIZADO COM SUCESSO!",
         components: []
       });
     }
 
+    // 🟢 INICIAR
     if (interaction.customId === "iniciar") {
       pontos.set(id, { inicio: Date.now() });
-      return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
+      return interaction.reply({ content: "🟢 Iniciado!", flags: 64 });
     }
 
+    // 🔴 FINALIZAR
     if (interaction.customId === "finalizar") {
       const p = pontos.get(id);
-      if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
+      if (!p) return interaction.reply({ content: "❌ Não iniciou", flags: 64 });
 
       const time = Date.now() - p.inicio;
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
-      return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, ephemeral: true });
+      return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, flags: 64 });
     }
   }
 });
