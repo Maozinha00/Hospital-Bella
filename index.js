@@ -88,7 +88,7 @@ function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
-// 🔘 BOTÕES PADRÃO
+// 🔘 BOTÕES
 function row() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -118,13 +118,13 @@ function resetRow() {
   );
 }
 
-// 📌 COMMANDS
+// 📌 COMMANDS (🔥 CORRIGIDO COM DESCRIPTION EM TUDO)
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel hospital")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal").setRequired(true)
+      o.setName("canal").setDescription("Canal do painel").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -132,20 +132,24 @@ const commands = [
     .setDescription("Adicionar tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas"))
-    .addIntegerOption(o => o.setName("minutos")),
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(false))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
   new SlashCommandBuilder()
     .setName("removerhora")
     .setDescription("Remover tempo")
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o => o.setName("horas"))
-    .addIntegerOption(o => o.setName("minutos")),
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(false))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(false)),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ranking"),
+    .setDescription("Ver ranking do hospital"),
 
   new SlashCommandBuilder()
     .setName("forcar_entrar")
@@ -159,7 +163,6 @@ const commands = [
     .addUserOption(o =>
       o.setName("usuario").setDescription("Usuário").setRequired(true)),
 
-  // 🚨 RESET GERAL
   new SlashCommandBuilder()
     .setName("resetgeral")
     .setDescription("🚨 Reset total do sistema hospital")
@@ -228,7 +231,7 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
     }
 
-    // 🚨 RESET GERAL (CONFIRMAÇÃO)
+    // 🚨 RESET
     if (interaction.commandName === "resetgeral") {
       return interaction.reply({
         content: "⚠️ Tem certeza que deseja RESETAR TODO O SISTEMA?",
@@ -259,7 +262,6 @@ client.on("interactionCreate", async (interaction) => {
 
     const id = interaction.user.id;
 
-    // ❌ CANCELAR RESET
     if (interaction.customId === "cancel_reset") {
       return interaction.update({
         content: "❌ Reset cancelado com segurança.",
@@ -267,7 +269,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🚨 CONFIRMAR RESET
     if (interaction.customId === "confirm_reset") {
 
       if (!interaction.member.roles.cache.has(STAFF_ROLE)) {
@@ -281,19 +282,21 @@ client.on("interactionCreate", async (interaction) => {
       const log = interaction.guild.channels.cache.get(CANAL_LOG_RESET);
 
       if (log) {
-        const embed = new EmbedBuilder()
-          .setColor("Red")
-          .setTitle("🚨 RESET GERAL EXECUTADO")
-          .setDescription(`
+        log.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor("Red")
+              .setTitle("🚨 RESET GERAL EXECUTADO")
+              .setDescription(`
 🧠 Ranking zerado
 🏥 Plantões encerrados
 ⚙️ Sistema reiniciado
 
 👤 Por: <@${id}>
 🕒 <t:${Math.floor(Date.now() / 1000)}:F>
-          `);
-
-        log.send({ embeds: [embed] });
+              `)
+          ]
+        });
       }
 
       return interaction.update({
@@ -302,13 +305,11 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🟢 INICIAR
     if (interaction.customId === "iniciar") {
       pontos.set(id, { inicio: Date.now() });
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
-    // 🔴 FINALIZAR
     if (interaction.customId === "finalizar") {
       const p = pontos.get(id);
       if (!p) return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
