@@ -22,9 +22,6 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 📢 LOG RESET
-const CANAL_LOG_RESET = "1495178025602515177";
-
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
   console.log("❌ Configure TOKEN, CLIENT_ID e GUILD_ID");
   process.exit(1);
@@ -103,27 +100,15 @@ function row() {
   );
 }
 
-function resetRow() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("confirm_reset")
-      .setLabel("⚠️ CONFIRMAR RESET")
-      .setStyle(ButtonStyle.Danger),
-
-    new ButtonBuilder()
-      .setCustomId("cancel_reset")
-      .setLabel("❌ CANCELAR")
-      .setStyle(ButtonStyle.Secondary)
-  );
-}
-
 // 📌 COMMANDS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel hospital")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal do painel").setRequired(true)
+      o.setName("canal")
+        .setDescription("Canal")
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -148,7 +133,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ver ranking"),
+    .setDescription("Ranking"),
 
   new SlashCommandBuilder()
     .setName("forcar_entrar")
@@ -160,14 +145,10 @@ const commands = [
     .setName("forcar_sair")
     .setDescription("Retirar do serviço")
     .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("resetgeral")
-    .setDescription("🚨 Reset total do sistema hospital")
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
 ].map(c => c.toJSON());
 
-// 🔥 READY (CORRIGIDO)
+// 🔥 READY
 client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
@@ -199,18 +180,19 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 HOSPITAL BELLA
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
 👑 RESPONSÁVEL
 ${getBossList(channel.guild)}
 
-──────────────────
+────────────────────────────
 
-👨‍⚕️ EM SERVIÇO
+👨‍⚕️ EQUIPE EM SERVIÇO
 ${list}
 
-──────────────────
-👥 Ativos: ${pontos.size}
+────────────────────────────
+📊 STATUS
+👥 Médicos ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 `);
 
@@ -233,14 +215,19 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🚑 PAINEL HP (CORRIGIDO)
+    const user = interaction.options.getUser("usuario");
+    const h = interaction.options.getInteger("horas") || 0;
+    const m = interaction.options.getInteger("minutos") || 0;
+    const tempo = (h * 3600000) + (m * 60000);
+
+    // 🏥 PAINEL HP (CORRIGIDO)
     if (interaction.commandName === "painelhp") {
       const canal = interaction.options.getChannel("canal");
 
       const embed = new EmbedBuilder()
         .setColor("#0f172a")
-        .setTitle("🏥 PAINEL HOSPITAL ATIVO")
-        .setDescription("Sistema iniciado com sucesso");
+        .setTitle("🏥 PAINEL ATIVO")
+        .setDescription("Sistema hospital iniciado");
 
       const msg = await canal.send({
         embeds: [embed],
@@ -251,17 +238,19 @@ client.on("interactionCreate", async (interaction) => {
       config.msgId = msg.id;
 
       return interaction.reply({
-        content: "✅ Painel criado com sucesso!",
+        content: "✅ Painel criado!",
         flags: 64
       });
     }
 
-    if (interaction.commandName === "resetgeral") {
-      return interaction.reply({
-        content: "⚠️ Confirmar reset total do sistema?",
-        components: [resetRow()],
-        flags: 64
-      });
+    if (interaction.commandName === "addhora") {
+      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+      return interaction.reply({ content: "✅ Adicionado!", flags: 64 });
+    }
+
+    if (interaction.commandName === "removerhora") {
+      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
+      return interaction.reply({ content: "❌ Removido!", flags: 64 });
     }
 
     if (interaction.commandName === "rankinghp") {
@@ -279,43 +268,43 @@ client.on("interactionCreate", async (interaction) => {
         flags: 64
       });
     }
+
+    if (interaction.commandName === "forcar_entrar") {
+      pontos.set(user.id, { inicio: Date.now() });
+
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
+      return interaction.reply({ content: "🟢 Colocado em serviço", flags: 64 });
+    }
+
+    if (interaction.commandName === "forcar_sair") {
+      const p = pontos.get(user.id);
+      if (!p) return interaction.reply({ content: "❌ Não está em serviço", flags: 64 });
+
+      const time = Date.now() - p.inicio;
+      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
+      pontos.delete(user.id);
+
+      const m = interaction.guild.members.cache.get(user.id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
+      return interaction.reply({
+        content: `🔴 Removido • ${format(time)}`,
+        flags: 64
+      });
+    }
   }
 
   if (interaction.isButton()) {
 
     const id = interaction.user.id;
-
-    if (interaction.customId === "cancel_reset") {
-      return interaction.update({
-        content: "❌ Reset cancelado.",
-        components: []
-      });
-    }
-
-    if (interaction.customId === "confirm_reset") {
-
-      pontos.clear();
-      ranking.clear();
-      config = { painel: null, msgId: null };
-
-      const log = interaction.guild.channels.cache.get(CANAL_LOG_RESET);
-
-      if (log) {
-        log.send({
-          embeds: [
-            new EmbedBuilder()
-              .setColor("Red")
-              .setTitle("🚨 RESET EXECUTADO")
-              .setDescription(`Por: <@${id}>`)
-          ]
-        });
-      }
-
-      return interaction.update({
-        content: "🚨 RESET FINALIZADO COM SUCESSO!",
-        components: []
-      });
-    }
 
     if (interaction.customId === "iniciar") {
       pontos.set(id, { inicio: Date.now() });
@@ -330,7 +319,16 @@ client.on("interactionCreate", async (interaction) => {
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
-      return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, flags: 64 });
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
+      return interaction.reply({
+        content: `🔴 Finalizado • ${format(time)}`,
+        flags: 64
+      });
     }
   }
 });
