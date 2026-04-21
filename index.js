@@ -106,7 +106,9 @@ const commands = [
     .setName("painelhp")
     .setDescription("Criar painel hospital")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal").setRequired(true)
+      o.setName("canal")
+        .setDescription("Canal")
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -158,7 +160,7 @@ client.once("ready", async () => {
   setInterval(updatePanel, 15000);
 });
 
-// 🏥 PAINEL
+// 🏥 PAINEL (DESCRIÇÃO ORIGINAL RESTAURADA 🔥)
 async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
@@ -180,18 +182,31 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-👑 RESPONSÁVEL
+** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO **
+
+** 👑 RESPONSÁVEL DO PLANTÃO **
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-👨‍⚕️ EQUIPE EM SERVIÇO
+** 👨‍⚕️ EQUIPE EM SERVIÇO **
 ${list}
 
 ────────────────────────────
+
 📊 STATUS
 👥 Médicos ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
+
+────────────────────────────
+
+**🚨 OBSERVAÇÕES**
+• Sistema automático de controle de plantão
+• Registro de horas em tempo real
+• Ranking atualizado continuamente
+• Não deixe o ponto aberto
+
+🏥 Hospital Bella • Sistema Profissional
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
@@ -206,9 +221,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isChatInputCommand()) {
 
-    const member = interaction.member;
-
-    if (!isStaff(member)) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({
         content: "❌ Sem permissão",
         flags: 64
@@ -228,8 +241,8 @@ client.on("interactionCreate", async (interaction) => {
       const msg = await canal.send({
         embeds: [
           new EmbedBuilder()
-            .setColor("#0f172a")
             .setDescription("🏥 Painel ativo")
+            .setColor("#0f172a")
         ],
         components: [row()]
       });
