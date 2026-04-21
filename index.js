@@ -106,9 +106,7 @@ const commands = [
     .setName("painelhp")
     .setDescription("Criar painel hospital")
     .addChannelOption(o =>
-      o.setName("canal")
-        .setDescription("Canal")
-        .setRequired(true)
+      o.setName("canal").setDescription("Canal").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -208,7 +206,9 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isChatInputCommand()) {
 
-    if (!isStaff(interaction.member)) {
+    const member = interaction.member;
+
+    if (!isStaff(member)) {
       return interaction.reply({
         content: "❌ Sem permissão",
         flags: 64
@@ -220,21 +220,20 @@ client.on("interactionCreate", async (interaction) => {
     const m = interaction.options.getInteger("minutos") || 0;
     const tempo = (h * 3600000) + (m * 60000);
 
-    // 🏥 PAINEL HP (CORRIGIDO)
     if (interaction.commandName === "painelhp") {
       const canal = interaction.options.getChannel("canal");
 
-      const embed = new EmbedBuilder()
-        .setColor("#0f172a")
-        .setTitle("🏥 PAINEL ATIVO")
-        .setDescription("Sistema hospital iniciado");
+      config.painel = canal.id;
 
       const msg = await canal.send({
-        embeds: [embed],
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#0f172a")
+            .setDescription("🏥 Painel ativo")
+        ],
         components: [row()]
       });
 
-      config.painel = canal.id;
       config.msgId = msg.id;
 
       return interaction.reply({
@@ -307,7 +306,16 @@ client.on("interactionCreate", async (interaction) => {
     const id = interaction.user.id;
 
     if (interaction.customId === "iniciar") {
+      if (pontos.has(id)) return interaction.reply({ content: "❌ Já em serviço", flags: 64 });
+
       pontos.set(id, { inicio: Date.now() });
+
+      const m = interaction.guild.members.cache.get(id);
+      if (m) {
+        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
+        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
+      }
+
       return interaction.reply({ content: "🟢 Iniciado!", flags: 64 });
     }
 
