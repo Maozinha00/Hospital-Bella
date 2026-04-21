@@ -167,8 +167,8 @@ const commands = [
     .setDescription("🚨 Reset total do sistema hospital")
 ].map(c => c.toJSON());
 
-// 🔥 READY (ATUALIZADO)
-client.once("clientReady", async () => {
+// 🔥 READY (CORRIGIDO)
+client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
   await rest.put(
@@ -233,7 +233,29 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🚨 RESET
+    // 🚑 PAINEL HP (CORRIGIDO)
+    if (interaction.commandName === "painelhp") {
+      const canal = interaction.options.getChannel("canal");
+
+      const embed = new EmbedBuilder()
+        .setColor("#0f172a")
+        .setTitle("🏥 PAINEL HOSPITAL ATIVO")
+        .setDescription("Sistema iniciado com sucesso");
+
+      const msg = await canal.send({
+        embeds: [embed],
+        components: [row()]
+      });
+
+      config.painel = canal.id;
+      config.msgId = msg.id;
+
+      return interaction.reply({
+        content: "✅ Painel criado com sucesso!",
+        flags: 64
+      });
+    }
+
     if (interaction.commandName === "resetgeral") {
       return interaction.reply({
         content: "⚠️ Confirmar reset total do sistema?",
@@ -263,7 +285,6 @@ client.on("interactionCreate", async (interaction) => {
 
     const id = interaction.user.id;
 
-    // ❌ CANCELAR RESET
     if (interaction.customId === "cancel_reset") {
       return interaction.update({
         content: "❌ Reset cancelado.",
@@ -271,7 +292,6 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🚨 CONFIRMAR RESET
     if (interaction.customId === "confirm_reset") {
 
       pontos.clear();
@@ -297,13 +317,11 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // 🟢 INICIAR
     if (interaction.customId === "iniciar") {
       pontos.set(id, { inicio: Date.now() });
       return interaction.reply({ content: "🟢 Iniciado!", flags: 64 });
     }
 
-    // 🔴 FINALIZAR
     if (interaction.customId === "finalizar") {
       const p = pontos.get(id);
       if (!p) return interaction.reply({ content: "❌ Não iniciou", flags: 64 });
