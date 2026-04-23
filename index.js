@@ -25,7 +25,7 @@ const GUILD_ID = process.env.GUILD_ID;
 // 🛡️ STAFF ROLE
 const STAFF_ROLE = "1490431614055088128";
 
-// 🏥 CARGOS DE STATUS
+// 🏥 CARGOS
 const EM_SERVICO = "1492553421973356795";
 const FORA_SERVICO = "1492553631642288160";
 
@@ -99,8 +99,8 @@ const commands = [
     .setDescription("Ranking")
 ].map(c => c.toJSON());
 
-// 🔥 READY
-client.once("ready", async () => {
+// 🔥 READY (ATUALIZADO SEM WARNING)
+client.once("clientReady", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
   await rest.put(
@@ -113,11 +113,13 @@ client.once("ready", async () => {
   setInterval(async () => {
     if (updating) return;
     updating = true;
+
     try {
       await updatePanel();
-    } catch (e) {
-      console.log(e.message);
+    } catch (err) {
+      console.log("Erro painel:", err.message);
     }
+
     updating = false;
   }, 3000);
 });
@@ -143,8 +145,7 @@ async function updatePanel() {
     .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-👑 RESPONSÁVEL DO PLANTÃO
-Sistema ativo
+👑 PLANTÃO ATIVO
 
 ────────────────────────────
 
@@ -168,7 +169,7 @@ client.on("interactionCreate", async (interaction) => {
 
   const guild = interaction.guild;
 
-  async function setStatusRoles(userId, inService) {
+  async function setStatus(userId, inService) {
     const member = await guild.members.fetch(userId);
 
     if (inService) {
@@ -183,9 +184,7 @@ client.on("interactionCreate", async (interaction) => {
   // COMMANDS
   if (interaction.isChatInputCommand()) {
 
-    const member = interaction.member;
-
-    if (!isStaff(member)) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
     }
 
@@ -227,7 +226,7 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
 
       pontos.set(id, { inicio: Date.now() });
-      await setStatusRoles(id, true);
+      await setStatus(id, true);
 
       return interaction.reply({ content: "🟢 Em serviço!", ephemeral: true });
     }
@@ -243,7 +242,7 @@ client.on("interactionCreate", async (interaction) => {
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
-      await setStatusRoles(id, false);
+      await setStatus(id, false);
 
       return interaction.reply({
         content: `🔴 Fora de serviço • ${format(time)}`,
