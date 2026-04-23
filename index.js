@@ -38,7 +38,6 @@ const EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00");
 
 // 🧠
 let config = { painel: null, msgId: null };
-const pontos = new Map();
 const eventoDB = {};
 let eventoFinalizado = false;
 
@@ -63,7 +62,7 @@ const commands = [
 function eventoStatus() {
   const now = Date.now();
   if (now < EVENTO_INICIO.getTime()) return "fechado";
-  if (now >= EVENTO_INICIO.getTime() && now <= EVENTO_FIM.getTime()) return "ativo";
+  if (now <= EVENTO_FIM.getTime()) return "ativo";
   return "finalizado";
 }
 
@@ -110,20 +109,9 @@ async function updatePanel() {
 
     const status = eventoStatus();
 
-    let eventoText = "";
     let rankingText = "";
 
-    if (status === "fechado") {
-      eventoText = "🔴 EVENTO FECHADO (ABRE ÀS 19:00)";
-    }
-
-    if (status === "ativo") {
-      eventoText = "🟢 EVENTO ABERTO (ATENDIMENTOS LIBERADOS)";
-    }
-
     if (status === "finalizado") {
-      eventoText = "🏁 EVENTO FINALIZADO";
-
       rankingText = top3()
         .map((u, i) => `${["🥇","🥈","🥉"][i]} <@${u[0]}> • ${u[1].pontos} pts`)
         .join("\n") || "Sem dados";
@@ -132,28 +120,53 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+╔════════════════════════════════╗
+        🏥 **HOSPITAL BELLA**
+╚════════════════════════════════╝
 
-👨‍⚕️ EM SERVIÇO
+📢 **SISTEMA DE PLANTÃO + EVENTO**
+
+━━━━━━━━━━━━━━━━━━
+
+👨‍⚕️ **EQUIPE EM SERVIÇO**
 ${list}
 
-────────────────────────────
+━━━━━━━━━━━━━━━━━━
 
-${eventoText}
+📅 **EVENTO HP — 24/04**
+⏰ **Horário:** 19:00 às 21:00
 
-${status === "finalizado" ? `
-🏆 RESULTADO FINAL
-${rankingText}
-
-🎁 PREMIAÇÃO
-🥇 100k
-🥈 50k
-🥉 35k
+${status === "fechado" ? `
+🔴 **EVENTO FECHADO**
+> Aguarde o horário oficial para liberação.
 ` : ""}
 
-────────────────────────────
+${status === "ativo" ? `
+🟢 **EVENTO ABERTO**
+> Atendimentos e chamados liberados.
+> Pontuação em tempo real.
+> Apenas em serviço.
+` : ""}
+
+${status === "finalizado" ? `
+🏁 **EVENTO FINALIZADO**
+
+🏆 **RESULTADO FINAL**
+${rankingText}
+
+━━━━━━━━━━━━━━━━━━
+
+🎁 **PREMIAÇÃO**
+🥇 100 mil  
+🥈 50 mil  
+🥉 35 mil  
+` : ""}
+
+━━━━━━━━━━━━━━━━━━
 
 ⏰ Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+
+💙 Hospital Bella
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
@@ -222,7 +235,6 @@ client.on("interactionCreate", async (interaction) => {
     const status = eventoStatus();
     const user = getUser(member.id);
 
-    // 🔐 BLOQUEIO
     if (
       ["atendimento","chamado","ranking"].includes(interaction.customId) &&
       (status !== "ativo" || !member.roles.cache.has(ROLE_EM_SERVICO))
@@ -257,7 +269,7 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "ranking") {
       return interaction.reply({
-        content: "📊 Ranking disponível apenas após o evento",
+        content: "📊 Ranking disponível após o evento",
         flags: 64
       });
     }
