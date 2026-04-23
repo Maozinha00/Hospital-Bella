@@ -30,9 +30,9 @@ let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
-// 🚀 CLIENT
+// 🚀 BOT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -51,12 +51,26 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 👑 HIERARQUIA
+function isStaff(member) {
+  return member?.roles?.cache?.has(STAFF_ROLE);
+}
+
+// 👑 HIERARQUIA CORRIGIDA
 const HIERARQUIA = [
-  { id: "1477683902121509018", nome: "Diretor" },
-  { id: "1477683902121509017", nome: "Vice Diretor" },
-  { id: "1477683902121509016", nome: "Supervisor" },
-  { id: "1477683902121509015", nome: "Coordenador" }
+  // 👑 DIRETORES (3)
+  { id: "ID_DIRETOR_1", nome: "Diretor 1" },
+  { id: "ID_DIRETOR_2", nome: "Diretor 2" },
+  { id: "ID_DIRETOR_3", nome: "Diretor 3" },
+
+  // 👑 VICE DIRETOR
+  { id: "ID_VICE", nome: "Vice Diretor" },
+
+  // 👑 SUPERVISOR
+  { id: "ID_SUPERVISOR", nome: "Supervisor" },
+
+  // 👑 COORDENADORES
+  { id: "ID_COORD_1", nome: "Coordenador 1" },
+  { id: "ID_COORD_2", nome: "Coordenador 2" }
 ];
 
 function getBossList(guild) {
@@ -74,30 +88,53 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-function isStaff(member) {
-  return member?.roles?.cache?.has(STAFF_ROLE);
-}
-
-// 🔘 BOTÕES HP
+// 🔘 BOTÕES
 function row() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder()
+      .setCustomId("iniciar")
+      .setLabel("🟢 Iniciar")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("finalizar")
+      .setLabel("🔴 Finalizar")
+      .setStyle(ButtonStyle.Danger)
   );
 }
 
-// 📌 COMMANDS
+// 📌 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
-    .setDescription("Criar painel hospital")
+    .setDescription("Criar painel HP")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal do painel").setRequired(true)
+      o.setName("canal")
+        .setDescription("Canal do painel")
+        .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ver ranking de horas")
+    .setDescription("Ver ranking HP"),
+
+  new SlashCommandBuilder()
+    .setName("forcar_entrar")
+    .setDescription("Colocar usuário em serviço")
+    .addUserOption(o =>
+      o.setName("usuario")
+        .setDescription("Usuário")
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("forcar_sair")
+    .setDescription("Remover usuário do serviço")
+    .addUserOption(o =>
+      o.setName("usuario")
+        .setDescription("Usuário")
+        .setRequired(true)
+    )
 ].map(c => c.toJSON());
 
 // 🚀 READY
@@ -109,7 +146,7 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(updateHP, 15000);
+  setInterval(updateHP, 3000); // 🔥 atualização rápida
 });
 
 // 🏥 PAINEL HP
@@ -133,24 +170,22 @@ async function updateHP() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO **
-
-** 👑 RESPONSÁVEL DO PLANTÃO **
+**👑 RESPONSÁVEL DO PLANTÃO**
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-** 👨‍⚕️ EQUIPE EM SERVIÇO **
+**👨‍⚕️ EM SERVIÇO**
 ${list}
 
 ────────────────────────────
 
 📊 STATUS
-👥 Médicos ativos: ${pontos.size}
-🕒 Atualizado automaticamente
+👥 Ativos: ${pontos.size}
+🕒 Atualização automática
 
 ────────────────────────────
-🏥 Hospital Bella • Sistema Profissional
+🏥 Hospital Bella • Sistema HP
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
@@ -163,7 +198,6 @@ client.on("interactionCreate", async (i) => {
 
   const id = i.user.id;
 
-  // 🏥 BOTÕES
   if (i.isButton()) {
 
     if (i.customId === "iniciar") {
@@ -171,13 +205,13 @@ client.on("interactionCreate", async (i) => {
         return i.reply({ content: "❌ Já em serviço", ephemeral: true });
 
       pontos.set(id, { inicio: Date.now() });
-      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
+      return i.reply({ content: "🟢 Entrou em serviço", ephemeral: true });
     }
 
     if (i.customId === "finalizar") {
       const p = pontos.get(id);
       if (!p)
-        return i.reply({ content: "❌ Você não iniciou", ephemeral: true });
+        return i.reply({ content: "❌ Você não está em serviço", ephemeral: true });
 
       const tempo = Date.now() - p.inicio;
 
@@ -185,25 +219,25 @@ client.on("interactionCreate", async (i) => {
       pontos.delete(id);
 
       return i.reply({
-        content: `🔴 Finalizado • ${format(tempo)}`,
+        content: `🔴 Saiu do serviço • ${format(tempo)}`,
         ephemeral: true
       });
     }
   }
 
-  // 📌 COMANDOS
   if (i.isChatInputCommand()) {
 
     if (!isStaff(i.member))
       return i.reply({ content: "❌ Sem permissão", ephemeral: true });
 
+    // 🏥 PAINEL
     if (i.commandName === "painelhp") {
       const canal = i.options.getChannel("canal");
 
       config.painel = canal.id;
 
       const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 PAINEL ATIVO")],
+        embeds: [new EmbedBuilder().setDescription("🏥 PAINEL HP ATIVO")],
         components: [row()]
       });
 
@@ -212,6 +246,7 @@ client.on("interactionCreate", async (i) => {
       return i.reply({ content: "✅ Painel criado!", ephemeral: true });
     }
 
+    // 🏆 RANKING
     if (i.commandName === "rankinghp") {
       const top = [...ranking.entries()]
         .sort((a,b) => b[1]-a[1])
@@ -224,6 +259,33 @@ client.on("interactionCreate", async (i) => {
             .setTitle("🏆 Ranking HP")
             .setDescription(top || "Sem dados")
         ],
+        ephemeral: true
+      });
+    }
+
+    // 🟢 FORÇAR ENTRAR
+    if (i.commandName === "forcar_entrar") {
+      const user = i.options.getUser("usuario");
+      pontos.set(user.id, { inicio: Date.now() });
+
+      return i.reply({ content: `🟢 ${user.tag} entrou em serviço`, ephemeral: true });
+    }
+
+    // 🔴 FORÇAR SAIR
+    if (i.commandName === "forcar_sair") {
+      const user = i.options.getUser("usuario");
+
+      const p = pontos.get(user.id);
+      if (!p)
+        return i.reply({ content: "❌ Não está em serviço", ephemeral: true });
+
+      const tempo = Date.now() - p.inicio;
+
+      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
+      pontos.delete(user.id);
+
+      return i.reply({
+        content: `🔴 ${user.tag} removido • ${format(tempo)}`,
         ephemeral: true
       });
     }
