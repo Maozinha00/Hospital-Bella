@@ -26,18 +26,26 @@ const GUILD_ID = process.env.GUILD_ID;
 const STAFF_ROLE = "1490431614055088128";
 const CARGO_SERVICO = "1492553421973356795";
 
-// 📌 CANAIS
-const CANAL_EVENTO = "1477683908026961940";
+// 🏆 TOP 3 CARGOS
+const CARGO_1 = "1477683902100410424";
+const CARGO_2 = "1495374426815074304";
+const CARGO_3 = "1495374557404594267";
+
+// 📌 CANAL EVENTO
+const CANAL_EVENTO = "COLOQUE_ID_AQUI";
 
 // ⏰ EVENTO
 const EVENTO_INICIO = new Date("2026-04-24T19:00:00-03:00").getTime();
 const EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00").getTime();
 
-// 📊 SISTEMA
+// 🧠 SISTEMA ORIGINAL
 let config = { painel: null, msgId: null };
-const pontos = new Map(); // serviço
-const rankingTempo = new Map(); // horas
-const rankingEvento = new Map(); // evento
+const pontos = new Map();
+const ranking = new Map();
+
+// 🆕 EVENTO
+const rankingEvento = new Map();
+let eventoFinalizado = false;
 
 // 👑 HIERARQUIA
 const HIERARQUIA = [
@@ -82,7 +90,7 @@ function format(ms) {
 function tempoRelativo(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há 1 minuto";
+  if (m === 1) return "há um minuto";
   return `há ${m} minutos`;
 }
 
@@ -103,9 +111,9 @@ function listaServico() {
   return list || "Nenhum médico em serviço";
 }
 
-// 🏆 RANKINGS
+// 🏆 RANKS
 function rankingHoras() {
-  return [...rankingTempo.entries()]
+  return [...ranking.entries()]
     .sort((a,b) => b[1]-a[1])
     .map(([id,t]) => `<@${id}> • ${format(t)}`)
     .join("\n") || "Sem dados";
@@ -130,12 +138,11 @@ function botoesPonto() {
 function botoesEvento() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("hacking").setLabel("💻 Hacking").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary)
   );
 }
 
-// 📢 PAINEL BATE PONTO (ORIGINAL COMPLETO)
+// 📢 PAINEL ORIGINAL
 async function updatePanel() {
   if (!config.painel || !config.msgId) return;
 
@@ -172,7 +179,7 @@ ${rankingHoras()}
   await msg.edit({ embeds: [embed], components: [botoesPonto()] });
 }
 
-// 📢 PAINEL EVENTO
+// 📢 EVENTO
 let msgEvento;
 
 async function painelEvento() {
@@ -182,13 +189,20 @@ async function painelEvento() {
     .setColor(eventoAtivo() ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
     .setDescription(`
-${eventoAtivo() ? "🟢 ABERTO" : "🔴 FECHADO"}
+${eventoAtivo() ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO (19:00)"}
 
 👨‍⚕️ EM SERVIÇO
 ${listaServico()}
 
+━━━━━━━━━━━━━━━━━━
+
 🏆 TOP 3
 ${rankingEventoTop()}
+
+━━━━━━━━━━━━━━━━━━
+
+🏥 Atendimento → +1  
+📞 Chamado → +1
 `);
 
   if (msgEvento) {
@@ -200,70 +214,108 @@ ${rankingEventoTop()}
   }
 }
 
+// 🏁 FINAL EVENTO
+async function finalizarEvento() {
+  if (eventoFinalizado) return;
+  eventoFinalizado = true;
+
+  const guild = client.guilds.cache.first();
+
+  const top = [...rankingEvento.entries()]
+    .sort((a,b) => b[1] - a[1])
+    .slice(0,3);
+
+  for (let i = 0; i < top.length; i++) {
+    const [id] = top[i];
+    const member = await guild.members.fetch(id).catch(() => null);
+    if (!member) continue;
+
+    const cargo =
+      i === 0 ? CARGO_1 :
+      i === 1 ? CARGO_2 :
+      CARGO_3;
+
+    await member.roles.add(cargo).catch(() => {});
+  }
+
+  const canal = await client.channels.fetch(CANAL_EVENTO);
+
+  let resultado = "";
+  top.forEach(([id,p],i)=>{
+    resultado += `${["🥇","🥈","🥉"][i]} <@${id}> — ${p} pts\n`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor("#ffd700")
+    .setTitle("🏆 RESULTADO FINAL")
+    .setDescription(`
+${resultado}
+
+💰 PREMIAÇÃO
+🥇 100.000
+🥈 50.000
+🥉 35.000
+`);
+
+  canal.send({ embeds: [embed] });
+}
+
 // 🔁 LOOP
 setInterval(() => {
   updatePanel();
   painelEvento();
+
+  if (Date.now() > EVENTO_FIM) {
+    finalizarEvento();
+  }
+
 }, 5000);
 
-// 🎮 INTERAÇÕES
+// 🎮 INTERAÇÃO
 client.on("interactionCreate", async (i) => {
+  if (!i.isButton()) return;
 
-  if (i.isButton()) {
-    const id = i.user.id;
+  const id = i.user.id;
 
-    // 🔵 PONTO
-    if (i.customId === "iniciar") {
-      if (pontos.has(id))
-        return i.reply({ content: "Já em serviço", ephemeral: true });
+  if (i.customId === "iniciar") {
+    if (pontos.has(id))
+      return i.reply({ content: "Já em serviço", ephemeral: true });
 
-      pontos.set(id, { inicio: Date.now() });
-      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
-    }
+    pontos.set(id, { inicio: Date.now() });
+    return i.reply({ content: "🟢 Iniciado", ephemeral: true });
+  }
 
-    if (i.customId === "finalizar") {
-      const p = pontos.get(id);
-      if (!p) return i.reply({ content: "Não iniciou", ephemeral: true });
+  if (i.customId === "finalizar") {
+    const p = pontos.get(id);
+    if (!p) return i.reply({ content: "Não iniciou", ephemeral: true });
 
-      const tempo = Date.now() - p.inicio;
-      rankingTempo.set(id, (rankingTempo.get(id) || 0) + tempo);
-      pontos.delete(id);
+    const tempo = Date.now() - p.inicio;
+    ranking.set(id, (ranking.get(id) || 0) + tempo);
+    pontos.delete(id);
 
-      return i.reply({ content: `🔴 Finalizado (${format(tempo)})`, ephemeral: true });
-    }
+    return i.reply({ content: `🔴 Finalizado (${format(tempo)})`, ephemeral: true });
+  }
 
-    // 🔴 EVENTO
-    if (!eventoAtivo())
-      return i.reply({ content: "Evento fechado", ephemeral: true });
+  if (!eventoAtivo())
+    return i.reply({ content: "Evento fechado", ephemeral: true });
 
-    if (!pontos.has(id))
-      return i.reply({ content: "Bata ponto primeiro", ephemeral: true });
+  if (!pontos.has(id))
+    return i.reply({ content: "Bata ponto primeiro", ephemeral: true });
 
-    if (i.customId === "atendimento") {
-      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
-      return i.reply({ content: "+1 ponto", ephemeral: true });
-    }
+  if (i.customId === "atendimento") {
+    rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
+    return i.reply({ content: "+1 ponto", ephemeral: true });
+  }
 
-    if (i.customId === "chamado") {
-      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
-      return i.reply({ content: "+1 ponto", ephemeral: true });
-    }
-
-    if (i.customId === "hacking") {
-      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 2);
-      return i.reply({ content: "+2 pontos", ephemeral: true });
-    }
+  if (i.customId === "chamado") {
+    rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
+    return i.reply({ content: "+1 ponto", ephemeral: true });
   }
 });
 
 // 🚀 READY
-client.once("ready", async () => {
+client.once("ready", () => {
   console.log("✅ Bot online");
-
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: [] }
-  );
 });
 
 client.login(TOKEN);
