@@ -22,7 +22,7 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🛡️ STAFF ROLE
+// 🛡️ STAFF ROLE (quem pode mexer no sistema)
 const STAFF_ROLE = "1490431614055088128";
 
 // 🏷️ CARGOS DE SERVIÇO
@@ -66,11 +66,16 @@ const HIERARQUIA = [
   { id: "1477683902121509014", nome: "Coordenador 2" }
 ];
 
-// 👨‍⚕️ CONTROLE DE CARGOS SEM DUPLICAR
-async function setServico(member, emServico) {
-  try {
-    if (!member) return;
+// 🔐 PERMISSÃO STAFF
+function isStaff(member) {
+  return member?.roles?.cache?.has(STAFF_ROLE);
+}
 
+// 🏥 SET SERVIÇO (cargo on/off)
+async function setServico(member, emServico) {
+  if (!member) return;
+
+  try {
     if (emServico) {
       await member.roles.add(CARGO_EM_SERVICO).catch(() => {});
       await member.roles.remove(CARGO_FORA_SERVICO).catch(() => {});
@@ -79,17 +84,16 @@ async function setServico(member, emServico) {
       await member.roles.remove(CARGO_EM_SERVICO).catch(() => {});
     }
   } catch (err) {
-    console.log("Erro roles serviço:", err.message);
+    console.log("Erro setServico:", err.message);
   }
 }
 
-// ✅ FIX: sem duplicar usuários em cargos
+// 👑 BOSS LIST
 function getBossList(guild) {
   const usados = new Set();
 
   return HIERARQUIA.map(r => {
     const role = guild.roles.cache.get(r.id);
-
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
     const member = role.members
@@ -99,13 +103,8 @@ function getBossList(guild) {
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
-
     return `👑 <@${member.id}> • ${r.nome}`;
   }).join("\n");
-}
-
-function isStaff(member) {
-  return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
 // 🔘 BOTÕES
@@ -234,23 +233,18 @@ ${list}
   } catch (err) {
     console.log("Erro painel:", err.message);
   }
-}
+});
 
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isChatInputCommand()) {
 
-    const member = interaction.member;
-    if (!isStaff(member)) {
+    if (!isStaff(interaction.member)) {
       return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
     }
 
     const user = interaction.options.getUser("usuario");
-
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
-    const tempo = (h * 3600000) + (m * 60000);
 
     if (interaction.commandName === "painelhp") {
       const canal = interaction.options.getChannel("canal");
@@ -267,50 +261,27 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
     }
 
-    if (interaction.commandName === "addhora") {
-      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
-      return interaction.reply({ content: "✅ Adicionado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "removerhora") {
-      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
-      return interaction.reply({ content: "❌ Removido!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
-        .sort((a,b) => b[1]-a[1])
-        .map(([id,t]) => `<@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
-      });
-    }
-
     if (interaction.commandName === "forcar_entrar") {
       pontos.set(user.id, { inicio: Date.now() });
 
-      const memberTarget = await interaction.guild.members.fetch(user.id);
-      await setServico(memberTarget, true);
+      const member = await interaction.guild.members.fetch(user.id);
+      await setServico(member, true);
 
       return interaction.reply({ content: "🟢 Colocado em serviço", ephemeral: true });
     }
 
     if (interaction.commandName === "forcar_sair") {
       const p = pontos.get(user.id);
-      const memberTarget = await interaction.guild.members.fetch(user.id);
+      const member = await interaction.guild.members.fetch(user.id);
 
-      await setServico(memberTarget, false);
+      await setServico(member, false);
 
       if (!p)
         return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
 
-      const time = Date.now() - p.inicio;
-      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
       pontos.delete(user.id);
 
-      return interaction.reply({ content: `🔴 Removido • ${format(time)}`, ephemeral: true });
+      return interaction.reply({ content: "🔴 Removido do serviço", ephemeral: true });
     }
   }
 
@@ -334,15 +305,12 @@ client.on("interactionCreate", async (interaction) => {
       if (!p)
         return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
 
-      const time = Date.now() - p.inicio;
-
-      ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
       await setServico(interaction.member, false);
 
       return interaction.reply({
-        content: `🔴 Finalizado • ${format(time)}`,
+        content: "🔴 Finalizado",
         ephemeral: true
       });
     }
