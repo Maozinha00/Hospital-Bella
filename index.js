@@ -22,54 +22,53 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🛡️ STAFF ROLE
+// 📌 CANAIS (SEPARADOS)
+const CANAL_HP = "COLOQUE_ID_HP";
+const CANAL_EVENTO = "COLOQUE_ID_EVENTO";
+
+// 🛡️ STAFF
 const STAFF_ROLE = "1490431614055088128";
 
-// 🏥 CARGOS
-const CARGO_EM_SERVICO = "1492553421973356795";
-const CARGO_FORA_SERVICO = "1492553631642288160";
-
-// 🧠 SISTEMA
+// 🧠 SISTEMAS
 let config = { painel: null, msgId: null };
-const pontos = new Map();
-const ranking = new Map();
+const pontos = new Map();        // HP
+const ranking = new Map();       // horas
+const rankingEvento = new Map(); // evento
 
-// 🚀 CLIENT (CORRIGIDO)
+let msgEventoId = null;
+
+// 🏆 CARGOS EVENTO
+const CARGO_1 = "1477683902100410424";
+const CARGO_2 = "1495374426815074304";
+const CARGO_3 = "1495374557404594267";
+
+// 🤖 BOT
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ⏱ FORMAT
+// ⏱ UTIL
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
 
-function tempoRelativo(ms) {
+function tempo(ms) {
   const m = Math.floor(ms / 60000);
-  if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há um minuto";
-  return `há ${m} minutos`;
+  return m < 1 ? "há poucos segundos" : `há ${m} min`;
 }
 
-// 👑 HIERARQUIA (3 diretores + vice + supervisor + 2 coordenadores)
+// 👑 HIERARQUIA
 const HIERARQUIA = [
-  { id: "1477683902121509018", nome: "Diretor 1" },
-  { id: "1477683902121509019", nome: "Diretor 2" },
-  { id: "1477683902121509020", nome: "Diretor 3" },
+  { id: "1477683902121509018", nome: "Diretor" },
   { id: "1477683902121509017", nome: "Vice Diretor" },
   { id: "1477683902121509016", nome: "Supervisor" },
-  { id: "1477683902121509015", nome: "Coordenador 1" },
-  { id: "1477683902121509014", nome: "Coordenador 2" }
+  { id: "1477683902121509015", nome: "Coordenador" }
 ];
 
-// 👑 HIERARQUIA DISPLAY (CORRIGIDO)
 function getBossList(guild) {
   const usados = new Set();
 
@@ -77,10 +76,7 @@ function getBossList(guild) {
     const role = guild.roles.cache.get(r.id);
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
-    const member = role.members.cache
-      .filter(m => !usados.has(m.id))
-      .first();
-
+    const member = role.members.find(m => !usados.has(m.id));
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
@@ -88,23 +84,23 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-// 🔐 PERMISSÃO
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
-// 🔘 BOTÕES
-function row() {
+// 🔘 BOTÕES HP
+function rowHP() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("iniciar")
-      .setLabel("🟢 Iniciar Serviço")
-      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+  );
+}
 
-    new ButtonBuilder()
-      .setCustomId("finalizar")
-      .setLabel("🔴 Finalizar Serviço")
-      .setStyle(ButtonStyle.Danger)
+// 🔘 BOTÕES EVENTO
+function rowEvento() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -112,27 +108,9 @@ function row() {
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
-    .setDescription("Criar painel de bate ponto")
+    .setDescription("Criar painel hospital")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal").setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("rankinghp")
-    .setDescription("TOP 3 ranking"),
-
-  new SlashCommandBuilder()
-    .setName("forcar_entrar")
-    .setDescription("Colocar usuário em serviço")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("forcar_sair")
-    .setDescription("Retirar usuário do serviço")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
+      o.setName("canal").setDescription("Canal HP").setRequired(true)
     )
 ].map(c => c.toJSON());
 
@@ -145,11 +123,12 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(updatePanel, 3000);
+  setInterval(updateHP, 3000);
+  setInterval(updateEvento, 3000);
 });
 
-// 🏥 PAINEL
-async function updatePanel() {
+// 🏥 PAINEL HP
+async function updateHP() {
   try {
     if (!config.painel || !config.msgId) return;
 
@@ -157,140 +136,128 @@ async function updatePanel() {
     const msg = await channel.messages.fetch(config.msgId);
 
     let list = "";
-
-    for (const [id, data] of pontos.entries()) {
-      const time = Date.now() - data.inicio;
-      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
+    for (const [id, data] of pontos) {
+      list += `👨‍⚕️ <@${id}> • ${tempo(Date.now() - data.inicio)}\n`;
     }
 
     if (!list) list = "Nenhum médico em serviço";
 
     const embed = new EmbedBuilder()
-      .setColor("#00bfff")
+      .setColor("#0f172a")
       .setDescription(`
-🏥 ════════ **HOSPITAL BELLA** ════════
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-👑 **HIERARQUIA**
+👑 HIERARQUIA
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-🟢 **EM SERVIÇO**
-<@&${CARGO_EM_SERVICO}>
-
-🔴 **FORA DE SERVIÇO**
-<@&${CARGO_FORA_SERVICO}>
-
-────────────────────────────
-
-👨‍⚕️ **PLANTÃO**
+👨‍⚕️ EM SERVIÇO
 ${list}
 
 ────────────────────────────
-
-📊 **STATUS**
-• Ativos: ${pontos.size}
-• Atualização: 3 segundos
-
-────────────────────────────
-
-🏆 **TOP 3**
-${[...ranking.entries()]
-  .sort((a,b)=>b[1]-a[1])
-  .slice(0,3)
-  .map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`)
-  .join("\n") || "Sem dados"}
-
-────────────────────────────
-
-🏥 Sistema de Bate Ponto
+📊 Médicos ativos: ${pontos.size}
+🕒 Atualização automática: 3s
 `);
 
-    await msg.edit({ embeds: [embed], components: [row()] });
+    await msg.edit({ embeds: [embed], components: [rowHP()] });
 
-  } catch (err) {
-    console.log("Erro painel:", err.message);
+  } catch {}
+}
+
+// 📢 EVENTO
+async function updateEvento() {
+  const canal = await client.channels.fetch(CANAL_EVENTO);
+
+  let top = [...rankingEvento.entries()]
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,3)
+    .map(([id,p],i)=>`${["🥇","🥈","🥉"][i]} <@${id}> — ${p} pts`)
+    .join("\n");
+
+  if (!top) top = "Sem dados ainda";
+
+  const embed = new EmbedBuilder()
+    .setColor("#00ff00")
+    .setTitle("📢 EVENTO HOSPITAL BELLA")
+    .setDescription(`
+🏥 EVENTO ATIVO
+
+🏆 TOP 3
+${top}
+
+────────────────────────────
+📊 Atualização automática: 3s
+`);
+
+  if (msgEventoId) {
+    const msg = await canal.messages.fetch(msgEventoId);
+    await msg.edit({ embeds: [embed], components: [rowEvento()] });
+  } else {
+    const msg = await canal.send({ embeds: [embed], components: [rowEvento()] });
+    msgEventoId = msg.id;
   }
-});
+}
 
-// 🎯 INTERAÇÕES
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.guild) return;
+// 🎮 INTERAÇÕES
+client.on("interactionCreate", async (i) => {
+  const id = i.user.id;
 
-  const member = interaction.member;
-  const id = interaction.user.id;
+  if (i.isButton()) {
 
-  if (interaction.isChatInputCommand()) {
+    // 🏥 HP
+    if (i.customId === "iniciar") {
+      if (pontos.has(id))
+        return i.reply({ content: "Já em serviço", ephemeral: true });
 
-    if (!isStaff(member))
-      return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
+      pontos.set(id, { inicio: Date.now() });
+      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
+    }
 
-    const user = interaction.options.getUser("usuario");
+    if (i.customId === "finalizar") {
+      const p = pontos.get(id);
+      if (!p)
+        return i.reply({ content: "Não iniciou", ephemeral: true });
 
-    if (interaction.commandName === "painelhp") {
-      const canal = interaction.options.getChannel("canal");
+      ranking.set(id, (ranking.get(id)||0) + (Date.now()-p.inicio));
+      pontos.delete(id);
+
+      return i.reply({ content: "🔴 Finalizado", ephemeral: true });
+    }
+
+    // 📢 EVENTO
+    if (!pontos.has(id))
+      return i.reply({ content: "Bata ponto primeiro", ephemeral: true });
+
+    if (i.customId === "atendimento") {
+      rankingEvento.set(id, (rankingEvento.get(id)||0)+1);
+      return i.reply({ content: "+1 Atendimento", ephemeral: true });
+    }
+
+    if (i.customId === "chamado") {
+      rankingEvento.set(id, (rankingEvento.get(id)||0)+1);
+      return i.reply({ content: "+1 Chamado", ephemeral: true });
+    }
+  }
+
+  // COMANDO HP
+  if (i.isChatInputCommand()) {
+    if (!isStaff(i.member))
+      return i.reply({ content: "Sem permissão", ephemeral: true });
+
+    if (i.commandName === "painelhp") {
+      const canal = i.options.getChannel("canal");
 
       config.painel = canal.id;
 
       const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#00bfff")],
-        components: [row()]
+        embeds: [new EmbedBuilder().setDescription("🏥 PAINEL HP ATIVO")],
+        components: [rowHP()]
       });
 
       config.msgId = msg.id;
 
-      return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
-        .sort((a,b)=>b[1]-a[1])
-        .slice(0,3)
-        .map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [new EmbedBuilder().setTitle("🏆 TOP 3").setDescription(top || "Sem dados")]
-      });
-    }
-
-    if (interaction.commandName === "forcar_entrar") {
-      pontos.set(user.id, { inicio: Date.now() });
-      return interaction.reply({ content: "🟢 Em serviço", ephemeral: true });
-    }
-
-    if (interaction.commandName === "forcar_sair") {
-      const p = pontos.get(user.id);
-      if (!p) return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
-
-      const time = Date.now() - p.inicio;
-      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
-      pontos.delete(user.id);
-
-      return interaction.reply({ content: `🔴 Saiu • ${format(time)}`, ephemeral: true });
-    }
-  }
-
-  if (interaction.isButton()) {
-
-    if (interaction.customId === "iniciar") {
-      if (pontos.has(id))
-        return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
-
-      pontos.set(id, { inicio: Date.now() });
-      return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
-    }
-
-    if (interaction.customId === "finalizar") {
-      const p = pontos.get(id);
-      if (!p)
-        return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
-
-      const time = Date.now() - p.inicio;
-      ranking.set(id, (ranking.get(id) || 0) + time);
-      pontos.delete(id);
-
-      return interaction.reply({ content: `🔴 Finalizado • ${format(time)}`, ephemeral: true });
+      return i.reply({ content: "OK", ephemeral: true });
     }
   }
 });
