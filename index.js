@@ -60,9 +60,8 @@ const HIERARQUIA = [
   { id: "1477683902121509016", nome: "Supervisor" },
   { id: "1477683902121509015", nome: "Coordenador 1" },
   { id: "1477683902121509014", nome: "Coordenador 2" }
-];
+};
 
-// ✅ FIX: sem duplicar usuários em cargos
 function getBossList(guild) {
   const usados = new Set();
 
@@ -157,7 +156,17 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(updatePanel, 15000);
+  // 🔥 ATUALIZAÇÃO A CADA 3 SEGUNDOS (PROTEGIDO)
+  let updating = false;
+
+  setInterval(async () => {
+    if (updating) return;
+    updating = true;
+
+    await updatePanel();
+
+    updating = false;
+  }, 3000);
 });
 
 // 🏥 PAINEL
