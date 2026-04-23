@@ -22,24 +22,13 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 📌 CANAIS
-const CANAL_EVENTO = "COLOQUE_ID_EVENTO";
-
-// 🛡️ STAFF
+// 🛡️ STAFF ROLE
 const STAFF_ROLE = "1490431614055088128";
 
-// 🧠 SISTEMAS
+// 🧠 SISTEMA
 let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
-const rankingEvento = new Map();
-
-let msgEventoId = null;
-
-// 🏆 CARGOS EVENTO
-const CARGO_1 = "1477683902100410424";
-const CARGO_2 = "1495374426815074304";
-const CARGO_3 = "1495374557404594267";
 
 // 🤖 BOT
 const client = new Client({
@@ -49,12 +38,18 @@ const client = new Client({
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 // ⏱ UTIL
+function format(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
 function tempo(ms) {
   const m = Math.floor(ms / 60000);
   return m < 1 ? "há poucos segundos" : `há ${m} min`;
 }
 
-// 👑 HIERARQUIA
+// 👑 HIERARQUIA (3 DIRETORES OK)
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor 1" },
   { id: "1477683902121509019", nome: "Diretor 2" },
@@ -64,7 +59,6 @@ const HIERARQUIA = [
   { id: "1477683902121509015", nome: "Coordenador 1" },
   { id: "1477683902121509014", nome: "Coordenador 2" }
 ];
-
 
 function getBossList(guild) {
   const usados = new Set();
@@ -81,26 +75,58 @@ function getBossList(guild) {
   }).join("\n");
 }
 
+// 🔐 PERMISSÃO
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
-// 🔘 HP BOTÕES
-function rowHP() {
+// 🔘 BOTÕES
+function row() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder()
+      .setCustomId("iniciar")
+      .setLabel("🟢 Iniciar")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("finalizar")
+      .setLabel("🔴 Finalizar")
+      .setStyle(ButtonStyle.Danger)
   );
 }
 
-// 📌 COMMAND
+// 📌 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel hospital")
     .addChannelOption(o =>
       o.setName("canal").setDescription("Canal").setRequired(true)
-    )
+    ),
+
+  new SlashCommandBuilder()
+    .setName("addhora")
+    .setDescription("Adicionar tempo")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos")),
+
+  new SlashCommandBuilder()
+    .setName("removerhora")
+    .setDescription("Remover tempo")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas"))
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos")),
+
+  new SlashCommandBuilder()
+    .setName("rankinghp")
+    .setDescription("TOP 3")
 ].map(c => c.toJSON());
 
 // 🚀 READY
@@ -112,12 +138,11 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(updateHP, 3000);
-  setInterval(updateEvento, 3000);
+  setInterval(updatePanel, 3000);
 });
 
-// 🏥 HP PAINEL
-async function updateHP() {
+// 🏥 PAINEL HP
+async function updatePanel() {
   try {
     if (!config.painel || !config.msgId) return;
 
@@ -133,102 +158,71 @@ async function updateHP() {
     if (!list) list = "Nenhum médico em serviço";
 
     const embed = new EmbedBuilder()
-      .setColor("#0f172a")
+      .setColor("#00bfff")
       .setDescription(`
-🏥 ════════ **HOSPITAL BELLA** ════════
+🏥 **HOSPITAL BELLA**
 
 👑 HIERARQUIA
 ${getBossList(channel.guild)}
 
-────────────────────────────
+────────────────────
 
 👨‍⚕️ EM SERVIÇO
 ${list}
 
-────────────────────────────
+────────────────────
+
 📊 Ativos: ${pontos.size}
 🕒 Atualização: 3s
+
+🏥 Sistema ativo
 `);
 
-    await msg.edit({ embeds: [embed], components: [rowHP()] });
-
-  } catch {}
-}
-
-// 📢 EVENTO
-async function updateEvento() {
-  try {
-    const canal = await client.channels.fetch(CANAL_EVENTO);
-
-    let top = [...rankingEvento.entries()]
-      .sort((a,b)=>b[1]-a[1])
-      .slice(0,3)
-      .map(([id,p],i)=>`${["🥇","🥈","🥉"][i]} <@${id}> — ${p} pts`)
-      .join("\n");
-
-    if (!top) top = "Sem dados";
-
-    const embed = new EmbedBuilder()
-      .setColor("#00ff00")
-      .setTitle("📢 EVENTO HOSPITAL BELLA")
-      .setDescription(`
-🏥 EVENTO ATIVO
-
-🏆 TOP 3
-${top}
-
-────────────────────────────
-📊 Atualização: 3s
-`);
-
-    if (!msgEventoId) {
-      const msg = await canal.send({ embeds: [embed] });
-      msgEventoId = msg.id;
-    } else {
-      const msg = await canal.messages.fetch(msgEventoId);
-      await msg.edit({ embeds: [embed] });
-    }
+    await msg.edit({ embeds: [embed], components: [row()] });
 
   } catch {}
 }
 
 // 🎮 INTERAÇÕES
 client.on("interactionCreate", async (i) => {
-  const id = i.user.id;
-
-  if (i.isButton()) {
-
-    if (i.customId === "iniciar") {
-      if (pontos.has(id))
-        return i.reply({ content: "Já em serviço", ephemeral: true });
-
-      pontos.set(id, { inicio: Date.now() });
-      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
-    }
-
-    if (i.customId === "finalizar") {
-      const p = pontos.get(id);
-      if (!p)
-        return i.reply({ content: "Não iniciou", ephemeral: true });
-
-      ranking.set(id, (ranking.get(id)||0) + (Date.now()-p.inicio));
-      pontos.delete(id);
-
-      return i.reply({ content: "🔴 Finalizado", ephemeral: true });
-    }
-
-    // EVENTO
-    if (i.customId === "atendimento" || i.customId === "chamado") {
-      rankingEvento.set(id, (rankingEvento.get(id)||0)+1);
-      return i.reply({ content: "+1 ponto evento", ephemeral: true });
-    }
-  }
 
   if (i.isChatInputCommand()) {
 
     if (!isStaff(i.member))
-      return i.reply({ content: "Sem permissão", ephemeral: true });
+      return i.reply({ content: "❌ Sem permissão", ephemeral: true });
 
+    const user = i.options.getUser("usuario");
+
+    const h = i.options.getInteger("horas") || 0;
+    const m = i.options.getInteger("minutos") || 0;
+    const tempoMs = (h * 3600000) + (m * 60000);
+
+    // ➕ ADD HORA
+    if (i.commandName === "addhora") {
+      ranking.set(user.id, (ranking.get(user.id) || 0) + tempoMs);
+      return i.reply({ content: "✅ Adicionado", ephemeral: true });
+    }
+
+    // ➖ REMOVER HORA
+    if (i.commandName === "removerhora") {
+      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempoMs));
+      return i.reply({ content: "❌ Removido", ephemeral: true });
+    }
+
+    // 🏆 RANKING
+    if (i.commandName === "rankinghp") {
+      const top = [...ranking.entries()]
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0,3)
+        .map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`)
+        .join("\n");
+
+      return i.reply({
+        embeds: [new EmbedBuilder().setTitle("🏆 TOP 3").setDescription(top || "Sem dados")]
+      });
+    }
+
+    // 🏥 PAINEL
     if (i.commandName === "painelhp") {
       const canal = i.options.getChannel("canal");
 
@@ -236,12 +230,33 @@ client.on("interactionCreate", async (i) => {
 
       const msg = await canal.send({
         embeds: [new EmbedBuilder().setDescription("🏥 PAINEL ATIVO")],
-        components: [rowHP()]
+        components: [row()]
       });
 
       config.msgId = msg.id;
 
       return i.reply({ content: "OK", ephemeral: true });
+    }
+  }
+
+  // 🔘 BOTÕES
+  if (i.isButton()) {
+
+    const id = i.user.id;
+
+    if (i.customId === "iniciar") {
+      pontos.set(id, { inicio: Date.now() });
+      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
+    }
+
+    if (i.customId === "finalizar") {
+      const p = pontos.get(id);
+      if (!p) return i.reply({ content: "❌ Não iniciou", ephemeral: true });
+
+      ranking.set(id, (ranking.get(id) || 0) + (Date.now() - p.inicio));
+      pontos.delete(id);
+
+      return i.reply({ content: "🔴 Finalizado", ephemeral: true });
     }
   }
 });
