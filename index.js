@@ -34,7 +34,7 @@ let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
-// 🚀 CLIENT (CORRIGIDO)
+// 🚀 CLIENT
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -58,7 +58,7 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 👑 HIERARQUIA (3 diretores + vice + supervisor + 2 coordenadores)
+// 👑 HIERARQUIA
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor 1" },
   { id: "1477683902121509019", nome: "Diretor 2" },
@@ -69,7 +69,7 @@ const HIERARQUIA = [
   { id: "1477683902121509014", nome: "Coordenador 2" }
 ];
 
-// 👑 HIERARQUIA DISPLAY (CORRIGIDO)
+// 👑 HIERARQUIA DISPLAY
 function getBossList(guild) {
   const usados = new Set();
 
@@ -77,10 +77,7 @@ function getBossList(guild) {
     const role = guild.roles.cache.get(r.id);
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
-    const member = role.members.cache
-      .filter(m => !usados.has(m.id))
-      .first();
-
+    const member = role.members.find(m => !usados.has(m.id));
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
@@ -156,14 +153,22 @@ async function updatePanel() {
     const channel = await client.channels.fetch(config.painel);
     const msg = await channel.messages.fetch(config.msgId);
 
-    let list = "";
+    let list = [];
 
     for (const [id, data] of pontos.entries()) {
       const time = Date.now() - data.inicio;
-      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
+      list.push(`👨‍⚕️ <@${id}> • ${tempoRelativo(time)}`);
     }
 
-    if (!list) list = "Nenhum médico em serviço";
+    const listaFinal = list.length ? list.join("\n") : "Nenhum médico em serviço";
+
+    const topData = [...ranking.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+
+    const top = topData.length
+      ? topData.map(([id, t], i) => `${i + 1}º <@${id}> • ${format(t)}`).join("\n")
+      : "Sem dados";
 
     const embed = new EmbedBuilder()
       .setColor("#00bfff")
@@ -184,22 +189,18 @@ ${getBossList(channel.guild)}
 ────────────────────────────
 
 👨‍⚕️ **PLANTÃO**
-${list}
+${listaFinal}
 
 ────────────────────────────
 
 📊 **STATUS**
 • Ativos: ${pontos.size}
-• Atualização: 3 segundos
+• Atualização: 3s
 
 ────────────────────────────
 
 🏆 **TOP 3**
-${[...ranking.entries()]
-  .sort((a,b)=>b[1]-a[1])
-  .slice(0,3)
-  .map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`)
-  .join("\n") || "Sem dados"}
+${top}
 
 ────────────────────────────
 
@@ -243,14 +244,16 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
+      const topData = [...ranking.entries()]
         .sort((a,b)=>b[1]-a[1])
-        .slice(0,3)
-        .map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`)
-        .join("\n");
+        .slice(0,3);
+
+      const top = topData.length
+        ? topData.map(([id,t],i)=>`${i+1}º <@${id}> • ${format(t)}`).join("\n")
+        : "Sem dados";
 
       return interaction.reply({
-        embeds: [new EmbedBuilder().setTitle("🏆 TOP 3").setDescription(top || "Sem dados")]
+        embeds: [new EmbedBuilder().setTitle("🏆 TOP 3").setDescription(top)]
       });
     }
 
@@ -261,7 +264,8 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.commandName === "forcar_sair") {
       const p = pontos.get(user.id);
-      if (!p) return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
+      if (!p)
+        return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
 
       const time = Date.now() - p.inicio;
       ranking.set(user.id, (ranking.get(user.id) || 0) + time);
