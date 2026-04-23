@@ -1,71 +1,68 @@
 import "dotenv/config";
+import express from "express";
 import {
   Client,
   GatewayIntentBits,
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } from "discord.js";
 
+// 🌐 KEEP ALIVE
+const app = express();
+app.get("/", (_, res) => res.send("Bot online 🔥"));
+app.listen(3000);
+
+// 🔐 ENV
 const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 // 👮 CARGOS
-const CARGO_SERVICO_ID = "1492553421973356795";
-const CARGO_PING = "1477683902079303932";
-
-// 🏆 TOP 3 CARGOS
-const CARGO_1 = "1477683902100410424";
-const CARGO_2 = "1495374426815074304";
-const CARGO_3 = "1495374557404594267";
+const STAFF_ROLE = "1490431614055088128";
+const CARGO_SERVICO = "1492553421973356795";
 
 // 📌 CANAIS
-const CANAL_EVENTO_ID = "1477683908026961940";
-const CANAL_BATE_PONTO_ID = "1490431346298851490";
+const CANAL_EVENTO = "1477683908026961940";
 
-// ⏰ EVENTO (24/04 DAS 19h ÀS 21h)
+// ⏰ EVENTO
 const EVENTO_INICIO = new Date("2026-04-24T19:00:00-03:00").getTime();
 const EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00").getTime();
 
-// 📊 DB
-const db = {
-  users: {},
-  servico: new Set()
-};
+// 📊 SISTEMA
+let config = { painel: null, msgId: null };
+const pontos = new Map(); // serviço
+const rankingTempo = new Map(); // horas
+const rankingEvento = new Map(); // evento
 
-function getUser(id) {
-  if (!db.users[id]) {
-    db.users[id] = { pontos: 0 };
-  }
-  return db.users[id];
-}
+// 👑 HIERARQUIA
+const HIERARQUIA = [
+  { id: "1477683902121509018", nome: "Diretor" },
+  { id: "1477683902121509017", nome: "Vice Diretor" },
+  { id: "1477683902121509016", nome: "Supervisor" },
+  { id: "1477683902121509015", nome: "Coordenador" }
+];
 
-// ⏰ STATUS
-function eventoAtivo() {
-  const agora = Date.now();
-  return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
-}
+function getBossList(guild) {
+  const usados = new Set();
 
-// 👨‍⚕️ SERVIÇO
-function listaServico() {
-  if (db.servico.size === 0) return "Nenhum médico em serviço";
+  return HIERARQUIA.map(r => {
+    const role = guild.roles.cache.get(r.id);
+    if (!role) return `👑 Nenhum • ${r.nome}`;
 
-  return [...db.servico]
-    .map(id => `👨‍⚕️ <@${id}>`)
-    .join("\n");
-}
+    const member = role.members
+      .filter(m => !usados.has(m.id))
+      .first();
 
-// 🏆 RANKING
-function ranking() {
-  const r = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
+    if (!member) return `👑 Nenhum • ${r.nome}`;
 
-  if (!r.length) return "Sem dados";
-
-  return r.map(([id, d], i) =>
-    `${["🥇","🥈","🥉"][i]} <@${id}> — ${d.pontos} pts`
-  ).join("\n");
+    usados.add(member.id);
+    return `👑 <@${member.id}> • ${r.nome}`;
+  }).join("\n");
 }
 
 // 🤖 BOT
@@ -73,193 +70,200 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-let msgEventoId;
-let msgPontoId;
-let eventoFinalizado = false;
+const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 🔘 BOTÕES EVENTO
+// ⏱ FUNÇÕES
+function format(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return `${h}h ${m}m`;
+}
+
+function tempoRelativo(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 1) return "há poucos segundos";
+  if (m === 1) return "há 1 minuto";
+  return `há ${m} minutos`;
+}
+
+function eventoAtivo() {
+  const agora = Date.now();
+  return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
+}
+
+// 👨‍⚕️ LISTA
+function listaServico() {
+  let list = "";
+
+  for (const [id, data] of pontos) {
+    const tempo = Date.now() - data.inicio;
+    list += `👨‍⚕️ <@${id}> • ${tempoRelativo(tempo)}\n`;
+  }
+
+  return list || "Nenhum médico em serviço";
+}
+
+// 🏆 RANKINGS
+function rankingHoras() {
+  return [...rankingTempo.entries()]
+    .sort((a,b) => b[1]-a[1])
+    .map(([id,t]) => `<@${id}> • ${format(t)}`)
+    .join("\n") || "Sem dados";
+}
+
+function rankingEventoTop() {
+  return [...rankingEvento.entries()]
+    .sort((a,b) => b[1]-a[1])
+    .slice(0,3)
+    .map(([id,p],i)=>`${["🥇","🥈","🥉"][i]} <@${id}> — ${p} pts`)
+    .join("\n") || "Sem dados";
+}
+
+// 🔘 BOTÕES
+function botoesPonto() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("iniciar").setLabel("🟢 Iniciar").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("finalizar").setLabel("🔴 Finalizar").setStyle(ButtonStyle.Danger)
+  );
+}
+
 function botoesEvento() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("atendimento").setLabel("🏥 Atendimento").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId("chamado").setLabel("📞 Chamado").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("hacking").setLabel("💻 Hacking").setStyle(ButtonStyle.Secondary)
   );
 }
 
-// 🔘 BOTÕES PONTO
-function botoesPonto() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("entrar").setLabel("🟢 Entrar em Serviço").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("sair").setLabel("🔴 Sair de Serviço").setStyle(ButtonStyle.Danger)
-  );
+// 📢 PAINEL BATE PONTO (ORIGINAL COMPLETO)
+async function updatePanel() {
+  if (!config.painel || !config.msgId) return;
+
+  const channel = await client.channels.fetch(config.painel);
+  const msg = await channel.messages.fetch(config.msgId);
+
+  const embed = new EmbedBuilder()
+    .setColor("#0f172a")
+    .setDescription(`
+🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+
+✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
+
+👑 RESPONSÁVEL DO PLANTÃO
+${getBossList(channel.guild)}
+
+────────────────────────────
+
+👨‍⚕️ EQUIPE EM SERVIÇO
+${listaServico()}
+
+────────────────────────────
+
+📊 STATUS
+👥 Médicos ativos: ${pontos.size}
+🕒 Atualizado: <t:${Math.floor(Date.now()/1000)}:R>
+
+────────────────────────────
+
+🏆 RANKING DE HORAS
+${rankingHoras()}
+`);
+
+  await msg.edit({ embeds: [embed], components: [botoesPonto()] });
 }
 
 // 📢 PAINEL EVENTO
+let msgEvento;
+
 async function painelEvento() {
-  const canal = await client.channels.fetch(CANAL_EVENTO_ID);
-  const ativo = eventoAtivo();
+  const canal = await client.channels.fetch(CANAL_EVENTO);
 
   const embed = new EmbedBuilder()
-    .setColor(ativo ? "#00ff00" : "#ff0000")
+    .setColor(eventoAtivo() ? "#00ff00" : "#ff0000")
     .setTitle("📢 EVENTO HOSPITAL BELLA")
-    .setDescription(
-`<@&${CARGO_PING}>
-
-🏥 EVENTO HP — HOSPITAL BELLA
-📅 24/04/2026
-⏰ 19:00 → 21:00
-
-━━━━━━━━━━━━━━━━━━
-${ativo ? "🟢 EVENTO ABERTO" : "🔴 EVENTO FECHADO (LIBERA ÀS 19:00)"}
-
-━━━━━━━━━━━━━━━━━━
+    .setDescription(`
+${eventoAtivo() ? "🟢 ABERTO" : "🔴 FECHADO"}
 
 👨‍⚕️ EM SERVIÇO
 ${listaServico()}
 
-━━━━━━━━━━━━━━━━━━
+🏆 TOP 3
+${rankingEventoTop()}
+`);
 
-🏆 RANKING AO VIVO
-${ranking()}
-
-━━━━━━━━━━━━━━━━━━
-
-🥇 100 mil
-🥈 50 mil
-🥉 35 mil`
-    );
-
-  if (msgEventoId) {
-    const msg = await canal.messages.fetch(msgEventoId);
-    await msg.edit({ embeds: [embed], components: [botoesEvento()] });
+  if (msgEvento) {
+    const m = await canal.messages.fetch(msgEvento);
+    await m.edit({ embeds: [embed], components: [botoesEvento()] });
   } else {
-    const msg = await canal.send({ embeds: [embed], components: [botoesEvento()] });
-    msgEventoId = msg.id;
+    const m = await canal.send({ embeds: [embed], components: [botoesEvento()] });
+    msgEvento = m.id;
   }
 }
 
-// 📢 PAINEL BATE PONTO
-async function painelPonto() {
-  const canal = await client.channels.fetch(CANAL_BATE_PONTO_ID);
-  const ativo = eventoAtivo();
+// 🔁 LOOP
+setInterval(() => {
+  updatePanel();
+  painelEvento();
+}, 5000);
 
-  const embed = new EmbedBuilder()
-    .setColor(ativo ? "#00ff00" : "#ff0000")
-    .setTitle("🕒 BATE PONTO — HOSPITAL BELLA")
-    .setDescription(
-`🏥 Sistema de entrada em serviço
-
-${ativo 
-? "🟢 EVENTO ABERTO — Pode bater ponto" 
-: "🔴 EVENTO FECHADO (LIBERA ÀS 19:00)"}
-
-━━━━━━━━━━━━━━━━━━
-
-👨‍⚕️ EM SERVIÇO
-${listaServico()}
-
-━━━━━━━━━━━━━━━━━━
-
-⚠️ Bata ponto antes de atender pacientes`
-    );
-
-  if (msgPontoId) {
-    const msg = await canal.messages.fetch(msgPontoId);
-    await msg.edit({ embeds: [embed], components: [botoesPonto()] });
-  } else {
-    const msg = await canal.send({ embeds: [embed], components: [botoesPonto()] });
-    msgPontoId = msg.id;
-  }
-}
-
-// 🏁 FINALIZAR EVENTO (TOP 3)
-async function finalizarEvento() {
-  if (eventoFinalizado) return;
-  eventoFinalizado = true;
-
-  const guild = client.guilds.cache.first();
-
-  const rankingFinal = Object.entries(db.users)
-    .sort((a, b) => b[1].pontos - a[1].pontos)
-    .slice(0, 3);
-
-  for (let i = 0; i < rankingFinal.length; i++) {
-    const [userId] = rankingFinal[i];
-
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
-
-    const cargo = i === 0 ? CARGO_1 : i === 1 ? CARGO_2 : CARGO_3;
-
-    await member.roles.add(cargo).catch(() => {});
-  }
-
-  console.log("🏆 TOP 3 receberam cargos!");
-}
-
-// 🔁 LOOP 3s
-setInterval(async () => {
-  await painelEvento();
-  await painelPonto();
-
-  if (Date.now() >= EVENTO_FIM) {
-    await finalizarEvento();
-  }
-
-}, 3000);
-
-// 🎮 INTERAÇÃO
+// 🎮 INTERAÇÕES
 client.on("interactionCreate", async (i) => {
-  if (!i.isButton()) return;
 
-  const member = await i.guild.members.fetch(i.user.id);
+  if (i.isButton()) {
+    const id = i.user.id;
 
-  if (!member.roles.cache.has(CARGO_SERVICO_ID))
-    return i.reply({ content: "🚫 Sem cargo", ephemeral: true });
+    // 🔵 PONTO
+    if (i.customId === "iniciar") {
+      if (pontos.has(id))
+        return i.reply({ content: "Já em serviço", ephemeral: true });
 
-  const user = getUser(i.user.id);
+      pontos.set(id, { inicio: Date.now() });
+      return i.reply({ content: "🟢 Iniciado", ephemeral: true });
+    }
 
-  // 🟢 ENTRAR
-  if (i.customId === "entrar") {
-    db.servico.add(i.user.id);
-    await painelPonto();
-    await painelEvento();
-    return i.reply({ content: "🟢 Você entrou em serviço", ephemeral: true });
-  }
+    if (i.customId === "finalizar") {
+      const p = pontos.get(id);
+      if (!p) return i.reply({ content: "Não iniciou", ephemeral: true });
 
-  // 🔴 SAIR
-  if (i.customId === "sair") {
-    db.servico.delete(i.user.id);
-    await painelPonto();
-    await painelEvento();
-    return i.reply({ content: "🔴 Você saiu de serviço", ephemeral: true });
-  }
+      const tempo = Date.now() - p.inicio;
+      rankingTempo.set(id, (rankingTempo.get(id) || 0) + tempo);
+      pontos.delete(id);
 
-  if (!eventoAtivo())
-    return i.reply({ content: "⛔ Evento fechado", ephemeral: true });
+      return i.reply({ content: `🔴 Finalizado (${format(tempo)})`, ephemeral: true });
+    }
 
-  if (!db.servico.has(i.user.id))
-    return i.reply({ content: "⚠️ Bata ponto antes!", ephemeral: true });
+    // 🔴 EVENTO
+    if (!eventoAtivo())
+      return i.reply({ content: "Evento fechado", ephemeral: true });
 
-  // 🏥 ATENDIMENTO
-  if (i.customId === "atendimento") {
-    user.pontos += 1;
-    await painelEvento();
-    return i.reply({ content: "+1 ponto", ephemeral: true });
-  }
+    if (!pontos.has(id))
+      return i.reply({ content: "Bata ponto primeiro", ephemeral: true });
 
-  // 📞 CHAMADO
-  if (i.customId === "chamado") {
-    user.pontos += 2;
-    await painelEvento();
-    return i.reply({ content: "+2 pontos", ephemeral: true });
+    if (i.customId === "atendimento") {
+      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
+      return i.reply({ content: "+1 ponto", ephemeral: true });
+    }
+
+    if (i.customId === "chamado") {
+      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 1);
+      return i.reply({ content: "+1 ponto", ephemeral: true });
+    }
+
+    if (i.customId === "hacking") {
+      rankingEvento.set(id, (rankingEvento.get(id) || 0) + 2);
+      return i.reply({ content: "+2 pontos", ephemeral: true });
+    }
   }
 });
 
 // 🚀 READY
 client.once("ready", async () => {
   console.log("✅ Bot online");
-  await painelEvento();
-  await painelPonto();
+
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: [] }
+  );
 });
 
 client.login(TOKEN);
