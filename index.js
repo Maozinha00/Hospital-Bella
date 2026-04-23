@@ -25,16 +25,12 @@ const GUILD_ID = process.env.GUILD_ID;
 // 🛡️ STAFF ROLE
 const STAFF_ROLE = "1490431614055088128";
 
-// 🏆 TOP 3 CARGOS
-const CARGO_1 = "1477683902100410424";
-const CARGO_2 = "1495374426815074304";
-const CARGO_3 = "1495374557404594267";
-
 // 🧠 SISTEMA
 let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
+// 🚀 CLIENT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
@@ -55,7 +51,7 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 👑 HIERARQUIA CORRIGIDA
+// 👑 HIERARQUIA (3 diretores + vice + supervisor + 2 coordenadores)
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor 1" },
   { id: "1477683902121509019", nome: "Diretor 2" },
@@ -66,7 +62,7 @@ const HIERARQUIA = [
   { id: "1477683902121509014", nome: "Coordenador 2" }
 ];
 
-// 👑 LISTA HIERARQUIA
+// 👑 HIERARQUIA DISPLAY
 function getBossList(guild) {
   const usados = new Set();
 
@@ -179,26 +175,37 @@ async function updatePanel() {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
-🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+🏥 ═══════════════〔 **HOSPITAL BELLA** 〕══════════════
 
-** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO **
+✨ **SISTEMA DE PLANTÃO ATIVO EM TEMPO REAL**
 
-** 👑 RESPONSÁVEL DO PLANTÃO **
+────────────────────────────
+
+👑 **RESPONSÁVEL DO PLANTÃO**
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-** 👨‍⚕️ EQUIPE EM SERVIÇO **
+👨‍⚕️ **EQUIPE EM SERVIÇO**
 ${list}
 
 ────────────────────────────
 
-📊 STATUS
-👥 Médicos ativos: ${pontos.size}
+📊 **STATUS DO SISTEMA**
+👥 Médicos ativos: **${pontos.size}**
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
-🏥 Hospital Bella
+
+⚠️ **OBSERVAÇÕES**
+• Sistema automático de controle de plantão  
+• Registro de horas em tempo real  
+• Ranking atualizado continuamente  
+• Não deixe o ponto aberto  
+
+────────────────────────────
+
+🏥 **Hospital Bella • Sistema Profissional**
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
