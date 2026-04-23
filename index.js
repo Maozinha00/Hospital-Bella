@@ -38,7 +38,10 @@ const pontos = new Map();
 
 // 🚀 CLIENT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers // 🔥 ESSENCIAL
+  ]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -110,10 +113,7 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  // 🔥 LOOP FORÇADO (NUNCA PARA)
-  setInterval(() => {
-    updatePanel();
-  }, 3000);
+  setInterval(updatePanel, 3000);
 });
 
 // 🏥 UPDATE
@@ -124,11 +124,21 @@ async function updatePanel() {
     const channel = await client.channels.fetch(config.painel);
     const msg = await channel.messages.fetch(config.msgId);
 
+    const role = channel.guild.roles.cache.get(ROLE_EM_SERVICO);
+
     let list = "";
 
-    for (const [id, data] of pontos) {
-      const tempo = Date.now() - data.inicio;
-      list += `<@${id}> • ${tempoRelativo(tempo)}\n`;
+    if (role && role.members.size > 0) {
+      role.members.forEach(member => {
+        const data = pontos.get(member.id);
+
+        if (data) {
+          const tempo = Date.now() - data.inicio;
+          list += `<@${member.id}> • ${tempoRelativo(tempo)}\n`;
+        } else {
+          list += `<@${member.id}> • sem registro\n`;
+        }
+      });
     }
 
     if (!list) list = "Nenhum médico em serviço";
@@ -151,7 +161,7 @@ ${list}
 ────────────────────────────
 
  STATUS
- Médicos ativos: ${pontos.size}
+ Médicos ativos: ${role?.members.size || 0}
  Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
@@ -206,24 +216,32 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.isButton()) {
 
-    const id = interaction.user.id;
+    const member = interaction.member;
 
     if (interaction.customId === "iniciar") {
-      if (pontos.has(id)) {
+
+      if (member.roles.cache.has(ROLE_EM_SERVICO)) {
         return interaction.reply({ content: "❌ Já está em serviço", flags: 64 });
       }
 
-      pontos.set(id, { inicio: Date.now() });
+      await member.roles.add(ROLE_EM_SERVICO);
+      await member.roles.remove(ROLE_FORA_SERVICO);
+
+      pontos.set(member.id, { inicio: Date.now() });
 
       return interaction.reply({ content: "🟢 Serviço iniciado", flags: 64 });
     }
 
     if (interaction.customId === "finalizar") {
-      if (!pontos.has(id)) {
-        return interaction.reply({ content: "❌ Você não iniciou", flags: 64 });
+
+      if (!member.roles.cache.has(ROLE_EM_SERVICO)) {
+        return interaction.reply({ content: "❌ Você não está em serviço", flags: 64 });
       }
 
-      pontos.delete(id);
+      await member.roles.remove(ROLE_EM_SERVICO);
+      await member.roles.add(ROLE_FORA_SERVICO);
+
+      pontos.delete(member.id);
 
       return interaction.reply({ content: "🔴 Serviço finalizado", flags: 64 });
     }
