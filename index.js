@@ -25,7 +25,7 @@ const GUILD_ID = process.env.GUILD_ID;
 // 🛡️ STAFF ROLE
 const STAFF_ROLE = "1490431614055088128";
 
-// 🏥 CARGOS (SERVIÇO)
+// 🏥 CARGOS
 const CARGO_EM_SERVICO = "1492553421973356795";
 const CARGO_FORA_SERVICO = "1492553631642288160";
 
@@ -34,9 +34,12 @@ let config = { painel: null, msgId: null };
 const pontos = new Map();
 const ranking = new Map();
 
-// 🚀 CLIENT
+// 🚀 CLIENT (CORRIGIDO)
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -55,7 +58,7 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 👑 HIERARQUIA (CORRIGIDA)
+// 👑 HIERARQUIA (3 diretores + vice + supervisor + 2 coordenadores)
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor 1" },
   { id: "1477683902121509019", nome: "Diretor 2" },
@@ -66,7 +69,7 @@ const HIERARQUIA = [
   { id: "1477683902121509014", nome: "Coordenador 2" }
 ];
 
-// 👑 LISTA HIERARQUIA
+// 👑 HIERARQUIA DISPLAY (CORRIGIDO)
 function getBossList(guild) {
   const usados = new Set();
 
@@ -74,7 +77,10 @@ function getBossList(guild) {
     const role = guild.roles.cache.get(r.id);
     if (!role) return `👑 Nenhum • ${r.nome}`;
 
-    const member = role.members.find(m => !usados.has(m.id));
+    const member = role.members.cache
+      .filter(m => !usados.has(m.id))
+      .first();
+
     if (!member) return `👑 Nenhum • ${r.nome}`;
 
     usados.add(member.id);
@@ -82,6 +88,7 @@ function getBossList(guild) {
   }).join("\n");
 }
 
+// 🔐 PERMISSÃO
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
@@ -129,7 +136,7 @@ const commands = [
     )
 ].map(c => c.toJSON());
 
-// 🔥 READY
+// 🚀 READY
 client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
@@ -151,7 +158,7 @@ async function updatePanel() {
 
     let list = "";
 
-    for (const [id, data] of pontos) {
+    for (const [id, data] of pontos.entries()) {
       const time = Date.now() - data.inicio;
       list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
     }
@@ -169,21 +176,21 @@ ${getBossList(channel.guild)}
 ────────────────────────────
 
 🟢 **EM SERVIÇO**
-Cargo: <@&${CARGO_EM_SERVICO}>
+<@&${CARGO_EM_SERVICO}>
 
 🔴 **FORA DE SERVIÇO**
-Cargo: <@&${CARGO_FORA_SERVICO}>
+<@&${CARGO_FORA_SERVICO}>
 
 ────────────────────────────
 
-👨‍⚕️ **PLANTÃO ATIVO**
+👨‍⚕️ **PLANTÃO**
 ${list}
 
 ────────────────────────────
 
 📊 **STATUS**
 • Ativos: ${pontos.size}
-• Atualização: ao vivo (3s)
+• Atualização: 3 segundos
 
 ────────────────────────────
 
@@ -196,7 +203,7 @@ ${[...ranking.entries()]
 
 ────────────────────────────
 
-🏥 Hospital Bella • Sistema de Bate Ponto
+🏥 Sistema de Bate Ponto
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
@@ -268,10 +275,10 @@ client.on("interactionCreate", async (interaction) => {
 
     if (interaction.customId === "iniciar") {
       if (pontos.has(id))
-        return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
+        return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
 
       pontos.set(id, { inicio: Date.now() });
-      return interaction.reply({ content: "🟢 Iniciou serviço!", ephemeral: true });
+      return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
     if (interaction.customId === "finalizar") {
