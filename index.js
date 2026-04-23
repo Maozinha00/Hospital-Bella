@@ -26,12 +26,12 @@ const GUILD_ID = process.env.GUILD_ID;
 const STAFF_ROLE = "1490431614055088128";
 const CARGO_SERVICO = "1492553421973356795";
 
-// 🏆 TOP 3 CARGOS
+// 🏆 TOP 3
 const CARGO_1 = "1477683902100410424";
 const CARGO_2 = "1495374426815074304";
 const CARGO_3 = "1495374557404594267";
 
-// 📌 CANAL EVENTO
+// 📌 CANAIS
 const CANAL_EVENTO = "COLOQUE_ID_AQUI";
 
 // ⏰ EVENTO
@@ -73,7 +73,7 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-// 🤖 BOT
+// 🤖 CLIENT
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
@@ -90,7 +90,6 @@ function format(ms) {
 function tempoRelativo(ms) {
   const m = Math.floor(ms / 60000);
   if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há um minuto";
   return `há ${m} minutos`;
 }
 
@@ -99,7 +98,7 @@ function eventoAtivo() {
   return agora >= EVENTO_INICIO && agora <= EVENTO_FIM;
 }
 
-// 👨‍⚕️ LISTA
+// 👨‍⚕️ LISTA SERVIÇO
 function listaServico() {
   let list = "";
 
@@ -142,7 +141,7 @@ function botoesEvento() {
   );
 }
 
-// 📢 PAINEL ORIGINAL
+// 📢 PAINEL BATE PONTO
 async function updatePanel() {
   if (!config.painel || !config.msgId) return;
 
@@ -214,7 +213,7 @@ ${rankingEventoTop()}
   }
 }
 
-// 🏁 FINAL EVENTO
+// 🏁 FINAL
 async function finalizarEvento() {
   if (eventoFinalizado) return;
   eventoFinalizado = true;
@@ -222,7 +221,7 @@ async function finalizarEvento() {
   const guild = client.guilds.cache.first();
 
   const top = [...rankingEvento.entries()]
-    .sort((a,b) => b[1] - a[1])
+    .sort((a,b) => b[1]-a[1])
     .slice(0,3);
 
   for (let i = 0; i < top.length; i++) {
@@ -230,11 +229,7 @@ async function finalizarEvento() {
     const member = await guild.members.fetch(id).catch(() => null);
     if (!member) continue;
 
-    const cargo =
-      i === 0 ? CARGO_1 :
-      i === 1 ? CARGO_2 :
-      CARGO_3;
-
+    const cargo = i === 0 ? CARGO_1 : i === 1 ? CARGO_2 : CARGO_3;
     await member.roles.add(cargo).catch(() => {});
   }
 
@@ -245,19 +240,14 @@ async function finalizarEvento() {
     resultado += `${["🥇","🥈","🥉"][i]} <@${id}> — ${p} pts\n`;
   });
 
-  const embed = new EmbedBuilder()
-    .setColor("#ffd700")
-    .setTitle("🏆 RESULTADO FINAL")
-    .setDescription(`
-${resultado}
-
-💰 PREMIAÇÃO
-🥇 100.000
-🥈 50.000
-🥉 35.000
-`);
-
-  canal.send({ embeds: [embed] });
+  canal.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor("#ffd700")
+        .setTitle("🏆 RESULTADO FINAL")
+        .setDescription(resultado)
+    ]
+  });
 }
 
 // 🔁 LOOP
@@ -271,7 +261,7 @@ setInterval(() => {
 
 }, 5000);
 
-// 🎮 INTERAÇÃO
+// 🎮 INTERAÇÕES
 client.on("interactionCreate", async (i) => {
   if (!i.isButton()) return;
 
