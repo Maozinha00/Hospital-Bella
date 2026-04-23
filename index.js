@@ -35,7 +35,6 @@ const ROLE_FORA_SERVICO = "1492553631642288160";
 // 🧠 SISTEMA
 let config = { painel: null, msgId: null };
 const pontos = new Map();
-const ranking = new Map();
 
 // 🚀 CLIENT
 const client = new Client({
@@ -44,18 +43,14 @@ const client = new Client({
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ⏱ FORMAT
-function format(ms) {
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  return `${h}h ${m}m`;
-}
-
+// ⏱ FUNÇÕES
 function tempoRelativo(ms) {
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há um minuto";
-  return `há ${m} minutos`;
+  const s = Math.floor(ms / 1000);
+  if (s < 5) return "agora mesmo";
+  if (s < 60) return `há ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m === 1) return "há 1 min";
+  return `há ${m} min`;
 }
 
 // 👑 HIERARQUIA
@@ -67,17 +62,13 @@ const HIERARQUIA = [
 ];
 
 function getBossList(guild) {
-  const usados = new Set();
-
   return HIERARQUIA.map(r => {
     const role = guild.roles.cache.get(r.id);
-    if (!role) return `👑 Nenhum • ${r.nome}`;
-
-    const member = role.members.filter(m => !usados.has(m.id)).first();
-    if (!member) return `👑 Nenhum • ${r.nome}`;
-
-    usados.add(member.id);
-    return `👑 <@${member.id}> • ${r.nome}`;
+    if (!role || role.members.size === 0) {
+      return `Nenhum • ${r.nome}`;
+    }
+    const member = role.members.first();
+    return `<@${member.id}> • ${r.nome}`;
   }).join("\n");
 }
 
@@ -100,20 +91,15 @@ function row() {
   );
 }
 
-// 📌 COMMANDS
+// 📌 COMMAND
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
-    .setDescription("Criar painel hospital")
+    .setDescription("Criar painel")
     .addChannelOption(o =>
-      o.setName("canal")
-        .setDescription("Canal")
-        .setRequired(true)
+      o.setName("canal").setDescription("Canal").setRequired(true)
     )
 ].map(c => c.toJSON());
-
-// 🔥 CONTROLE ANTI RATE LIMIT
-let updating = false;
 
 // 🔥 READY
 client.once("ready", async () => {
@@ -124,15 +110,14 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  // ⏱ 3 SEGUNDOS
-  setInterval(updatePanel, 3000);
+  // 🔥 LOOP FORÇADO (NUNCA PARA)
+  setInterval(() => {
+    updatePanel();
+  }, 3000);
 });
 
-// 🏥 UPDATE PANEL
+// 🏥 UPDATE
 async function updatePanel() {
-  if (updating) return;
-  updating = true;
-
   try {
     if (!config.painel || !config.msgId) return;
 
@@ -142,8 +127,8 @@ async function updatePanel() {
     let list = "";
 
     for (const [id, data] of pontos) {
-      const time = Date.now() - data.inicio;
-      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
+      const tempo = Date.now() - data.inicio;
+      list += `<@${id}> • ${tempoRelativo(tempo)}\n`;
     }
 
     if (!list) list = "Nenhum médico em serviço";
@@ -153,34 +138,38 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-** ✨ SISTEMA DE PLANTÃO EM FUNCIONAMENTO **
+ SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
-** 👑 RESPONSÁVEL DO PLANTÃO **
+ RESPONSÁVEL DO PLANTÃO
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
-** 👨‍⚕️ EQUIPE EM SERVIÇO **
+ EQUIPE EM SERVIÇO
 ${list}
 
 ────────────────────────────
 
-📊 STATUS
-👥 Médicos ativos: ${pontos.size}
-🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
+ STATUS
+ Médicos ativos: ${pontos.size}
+ Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
 
-🏥 Hospital Bella • Sistema Profissional
+ OBSERVAÇÕES
+• Sistema automático de controle de plantão
+• Registro de horas em tempo real
+• Ranking atualizado continuamente
+• Não deixe o ponto aberto
+
+ Hospital Bella • Sistema Profissional
 `);
 
     await msg.edit({ embeds: [embed], components: [row()] });
 
   } catch (err) {
-    console.log("Erro painel:", err.message);
+    console.log("⚠️ Erro ao atualizar:", err.message);
   }
-
-  updating = false;
 }
 
 // 🎯 INTERAÇÕES
@@ -200,7 +189,7 @@ client.on("interactionCreate", async (interaction) => {
       const msg = await canal.send({
         embeds: [
           new EmbedBuilder()
-            .setDescription("🏥 Painel ativo")
+            .setDescription("🏥 Painel iniciado...")
             .setColor("#0f172a")
         ],
         components: [row()]
@@ -220,36 +209,23 @@ client.on("interactionCreate", async (interaction) => {
     const id = interaction.user.id;
 
     if (interaction.customId === "iniciar") {
-      if (pontos.has(id)) return interaction.reply({ content: "❌ Já em serviço", flags: 64 });
+      if (pontos.has(id)) {
+        return interaction.reply({ content: "❌ Já está em serviço", flags: 64 });
+      }
 
       pontos.set(id, { inicio: Date.now() });
 
-      const m = interaction.guild.members.cache.get(id);
-      if (m) {
-        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
-      }
-
-      return interaction.reply({ content: "🟢 Iniciado!", flags: 64 });
+      return interaction.reply({ content: "🟢 Serviço iniciado", flags: 64 });
     }
 
     if (interaction.customId === "finalizar") {
-      const p = pontos.get(id);
-      if (!p) return interaction.reply({ content: "❌ Não iniciou", flags: 64 });
-
-      const time = Date.now() - p.inicio;
-      pontos.delete(id);
-
-      const m = interaction.guild.members.cache.get(id);
-      if (m) {
-        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
+      if (!pontos.has(id)) {
+        return interaction.reply({ content: "❌ Você não iniciou", flags: 64 });
       }
 
-      return interaction.reply({
-        content: `🔴 Finalizado • ${format(time)}`,
-        flags: 64
-      });
+      pontos.delete(id);
+
+      return interaction.reply({ content: "🔴 Serviço finalizado", flags: 64 });
     }
   }
 });
