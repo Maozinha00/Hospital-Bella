@@ -38,8 +38,9 @@ const EVENTO_FIM = new Date("2026-04-24T21:00:00-03:00");
 
 // 🧠 SISTEMAS
 let config = { painel: null, msgId: null };
-const pontos = new Map(); // plantão
-const eventoDB = {}; // evento
+const pontos = new Map();
+const eventoDB = {};
+let eventoFinalizado = false;
 
 // 🚀 CLIENT
 const client = new Client({
@@ -72,7 +73,7 @@ function getUser(id) {
   return eventoDB[id];
 }
 
-// 🏆 TOP 3 EVENTO
+// 🏆 TOP 3
 function top3() {
   return Object.entries(eventoDB)
     .sort((a, b) => b[1].pontos - a[1].pontos)
@@ -112,7 +113,9 @@ async function updatePanel() {
     if (!config.painel || !config.msgId) return;
 
     const channel = await client.channels.fetch(config.painel);
-    const msg = await channel.messages.fetch(config.msgId);
+    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
+    if (!msg) return;
+
     const role = channel.guild.roles.cache.get(ROLE_EM_SERVICO);
 
     let list = "";
@@ -185,19 +188,22 @@ async function finalizarEvento() {
     const cargo = i === 0 ? CARGO_1 : i === 1 ? CARGO_2 : CARGO_3;
     await member.roles.add(cargo);
   }
+
+  console.log("🏆 Evento finalizado!");
 }
 
 // 🔁 LOOP
 setInterval(async () => {
   await updatePanel();
 
-  if (Date.now() > EVENTO_FIM.getTime()) {
+  if (Date.now() > EVENTO_FIM.getTime() && !eventoFinalizado) {
+    eventoFinalizado = true;
     await finalizarEvento();
   }
 }, 5000);
 
 // 🚀 READY
-client.once("ready", async () => {
+client.once("clientReady", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
   await rest.put(
