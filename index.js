@@ -109,44 +109,11 @@ const commands = [
       o.setName("canal")
         .setDescription("Canal")
         .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("addhora")
-    .setDescription("Adicionar tempo")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos")),
-
-  new SlashCommandBuilder()
-    .setName("removerhora")
-    .setDescription("Remover tempo")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas"))
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos")),
-
-  new SlashCommandBuilder()
-    .setName("rankinghp")
-    .setDescription("Ranking"),
-
-  new SlashCommandBuilder()
-    .setName("forcar_entrar")
-    .setDescription("Colocar em serviço")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("forcar_sair")
-    .setDescription("Retirar do serviço")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true))
+    )
 ].map(c => c.toJSON());
+
+// 🔥 CONTROLE ANTI RATE LIMIT
+let updating = false;
 
 // 🔥 READY
 client.once("ready", async () => {
@@ -157,11 +124,15 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  setInterval(updatePanel, 15000);
+  // ⏱ 3 SEGUNDOS
+  setInterval(updatePanel, 3000);
 });
 
-// 🏥 PAINEL (DESCRIÇÃO ORIGINAL RESTAURADA 🔥)
+// 🏥 UPDATE PANEL
 async function updatePanel() {
+  if (updating) return;
+  updating = true;
+
   try {
     if (!config.painel || !config.msgId) return;
 
@@ -200,12 +171,6 @@ ${list}
 
 ────────────────────────────
 
-**🚨 OBSERVAÇÕES**
-• Sistema automático de controle de plantão
-• Registro de horas em tempo real
-• Ranking atualizado continuamente
-• Não deixe o ponto aberto
-
 🏥 Hospital Bella • Sistema Profissional
 `);
 
@@ -214,6 +179,8 @@ ${list}
   } catch (err) {
     console.log("Erro painel:", err.message);
   }
+
+  updating = false;
 }
 
 // 🎯 INTERAÇÕES
@@ -222,16 +189,8 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
 
     if (!isStaff(interaction.member)) {
-      return interaction.reply({
-        content: "❌ Sem permissão",
-        flags: 64
-      });
+      return interaction.reply({ content: "❌ Sem permissão", flags: 64 });
     }
-
-    const user = interaction.options.getUser("usuario");
-    const h = interaction.options.getInteger("horas") || 0;
-    const m = interaction.options.getInteger("minutos") || 0;
-    const tempo = (h * 3600000) + (m * 60000);
 
     if (interaction.commandName === "painelhp") {
       const canal = interaction.options.getChannel("canal");
@@ -251,64 +210,6 @@ client.on("interactionCreate", async (interaction) => {
 
       return interaction.reply({
         content: "✅ Painel criado!",
-        flags: 64
-      });
-    }
-
-    if (interaction.commandName === "addhora") {
-      ranking.set(user.id, (ranking.get(user.id) || 0) + tempo);
-      return interaction.reply({ content: "✅ Adicionado!", flags: 64 });
-    }
-
-    if (interaction.commandName === "removerhora") {
-      ranking.set(user.id, Math.max(0, (ranking.get(user.id) || 0) - tempo));
-      return interaction.reply({ content: "❌ Removido!", flags: 64 });
-    }
-
-    if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
-        .sort((a,b) => b[1]-a[1])
-        .map(([id,t]) => `<@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🏆 Ranking")
-            .setDescription(top || "Sem dados")
-        ],
-        flags: 64
-      });
-    }
-
-    if (interaction.commandName === "forcar_entrar") {
-      pontos.set(user.id, { inicio: Date.now() });
-
-      const m = interaction.guild.members.cache.get(user.id);
-      if (m) {
-        await m.roles.add(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.remove(ROLE_FORA_SERVICO).catch(() => {});
-      }
-
-      return interaction.reply({ content: "🟢 Colocado em serviço", flags: 64 });
-    }
-
-    if (interaction.commandName === "forcar_sair") {
-      const p = pontos.get(user.id);
-      if (!p) return interaction.reply({ content: "❌ Não está em serviço", flags: 64 });
-
-      const time = Date.now() - p.inicio;
-      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
-      pontos.delete(user.id);
-
-      const m = interaction.guild.members.cache.get(user.id);
-      if (m) {
-        await m.roles.remove(ROLE_EM_SERVICO).catch(() => {});
-        await m.roles.add(ROLE_FORA_SERVICO).catch(() => {});
-      }
-
-      return interaction.reply({
-        content: `🔴 Removido • ${format(time)}`,
         flags: 64
       });
     }
@@ -337,7 +238,6 @@ client.on("interactionCreate", async (interaction) => {
       if (!p) return interaction.reply({ content: "❌ Não iniciou", flags: 64 });
 
       const time = Date.now() - p.inicio;
-      ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
 
       const m = interaction.guild.members.cache.get(id);
