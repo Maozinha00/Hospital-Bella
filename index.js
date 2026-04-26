@@ -58,8 +58,8 @@ function tempoRelativo(ms) {
 // 👑 HIERARQUIA
 const HIERARQUIA = [
   { id: "1477683902121509018", nome: "Diretor 1" },
-  { id: "1477683902121509019", nome: "Diretor 2" },
-  { id: "1477683902121509020", nome: "Diretor 3" },
+  { id: "1477683902121509018", nome: "Diretor 2" },
+  { id: "1477683902121509018", nome: "Diretor 3" },
   { id: "1477683902121509017", nome: "Vice Diretor" },
   { id: "1477683902121509016", nome: "Supervisor" },
   { id: "1477683902121509015", nome: "Coordenador 1" },
