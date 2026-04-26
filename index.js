@@ -96,10 +96,50 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ranking")
+    .setDescription("Ranking"),
+
+  new SlashCommandBuilder()
+    .setName("abrirponto")
+    .setDescription("Abrir ponto de alguém")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("fecharponto")
+    .setDescription("Fechar ponto de alguém")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("addtempo")
+    .setDescription("Adicionar horas a um usuário")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("removertempo")
+    .setDescription("Remover horas de um usuário")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(true)
+    )
 ].map(c => c.toJSON());
 
-// 🔥 READY (SEM WARNING)
+// 🔥 READY
 client.once("clientReady", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
@@ -124,7 +164,7 @@ client.once("clientReady", async () => {
   }, 3000);
 });
 
-// 🏥 PAINEL (SUA DESCRIÇÃO ORIGINAL MANTIDA)
+// 🏥 PAINEL
 async function updatePanel() {
   if (!config.painel || !config.msgId) return;
 
@@ -174,7 +214,7 @@ ${list}
   await msg.edit({ embeds: [embed], components: [row()] });
 }
 
-// 👑 FUNÇÃO CHEFES
+// 👑 CHEFES
 function getBossList(guild) {
   const usados = new Set();
 
@@ -190,11 +230,10 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-// 🎯 INTERAÇÕES + CARGOS
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async (interaction) => {
 
   if (!interaction.member) return;
-
   const guild = interaction.guild;
 
   async function setStatus(userId, inService) {
@@ -209,6 +248,7 @@ client.on("interactionCreate", async (interaction) => {
     }
   }
 
+  // 🔹 COMMANDS
   if (interaction.isChatInputCommand()) {
 
     if (!isStaff(interaction.member)) {
@@ -240,8 +280,69 @@ client.on("interactionCreate", async (interaction) => {
         embeds: [new EmbedBuilder().setTitle("🏆 Ranking").setDescription(top || "Sem dados")]
       });
     }
+
+    if (interaction.commandName === "abrirponto") {
+      const user = interaction.options.getUser("usuario");
+
+      if (pontos.has(user.id))
+        return interaction.reply({ content: "❌ Usuário já está em serviço", ephemeral: true });
+
+      pontos.set(user.id, { inicio: Date.now() });
+      await setStatus(user.id, true);
+
+      return interaction.reply({ content: `🟢 Ponto aberto para <@${user.id}>` });
+    }
+
+    if (interaction.commandName === "fecharponto") {
+      const user = interaction.options.getUser("usuario");
+      const p = pontos.get(user.id);
+
+      if (!p)
+        return interaction.reply({ content: "❌ Usuário não está em serviço", ephemeral: true });
+
+      const time = Date.now() - p.inicio;
+
+      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
+      pontos.delete(user.id);
+
+      await setStatus(user.id, false);
+
+      return interaction.reply({
+        content: `🔴 Ponto fechado para <@${user.id}> • ${format(time)}`
+      });
+    }
+
+    if (interaction.commandName === "addtempo") {
+      const user = interaction.options.getUser("usuario");
+      const horas = interaction.options.getInteger("horas");
+      const minutos = interaction.options.getInteger("minutos");
+
+      const ms = (horas * 60 + minutos) * 60000;
+
+      ranking.set(user.id, (ranking.get(user.id) || 0) + ms);
+
+      return interaction.reply({
+        content: `➕ Adicionado ${horas}h ${minutos}m para <@${user.id}>`
+      });
+    }
+
+    if (interaction.commandName === "removertempo") {
+      const user = interaction.options.getUser("usuario");
+      const horas = interaction.options.getInteger("horas");
+      const minutos = interaction.options.getInteger("minutos");
+
+      const ms = (horas * 60 + minutos) * 60000;
+      const atual = ranking.get(user.id) || 0;
+
+      ranking.set(user.id, Math.max(0, atual - ms));
+
+      return interaction.reply({
+        content: `➖ Removido ${horas}h ${minutos}m de <@${user.id}>`
+      });
+    }
   }
 
+  // 🔘 BOTÕES
   if (interaction.isButton()) {
 
     const id = interaction.user.id;
