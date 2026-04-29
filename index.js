@@ -55,14 +55,11 @@ const format = ms => {
   return `${h}h ${m}m`;
 };
 
-// =====================
 // 👑 PAINEL HIERARQUIA
-// =====================
 const HIERARQUIA_PAINEL = [
   { id: "1477683902121509018", nome: "Diretor" },
   { id: "1477683902121509017", nome: "Vice Diretor" },
-  { id: "1477683902121509016", nome: "Supervisor" },
-  { id: "1477683902121509015", nome: "Coodernador" },
+  { id: "1477683902121509016", nome: "Supervisor" }
 ];
 
 function getBossList(guild) {
@@ -75,9 +72,7 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-// =====================
 // 📋 HIERARQUIA COMPLETA
-// =====================
 async function gerarHierarquia(guild) {
   const baseRole = guild.roles.cache.get(ROLE_BASE);
   if (!baseRole) return "❌ Cargo base não encontrado";
@@ -166,42 +161,62 @@ function row() {
   );
 }
 
-// 📌 COMMANDS
+// 📌 COMMANDS (CORRIGIDOS)
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel hospital")
-    .addChannelOption(o => o.setName("canal").setDescription("Canal").setRequired(true)),
+    .addChannelOption(o =>
+      o.setName("canal").setDescription("Canal do painel").setRequired(true)
+    ),
 
-  new SlashCommandBuilder().setName("rankinghp").setDescription("Ranking de horas"),
+  new SlashCommandBuilder()
+    .setName("rankinghp")
+    .setDescription("Ver ranking de horas"),
 
   new SlashCommandBuilder()
     .setName("abrirponto")
-    .setDescription("Abrir ponto")
-    .addUserOption(o => o.setName("usuario").setRequired(true)),
+    .setDescription("Abrir ponto de um usuário")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("fecharponto")
-    .setDescription("Fechar ponto")
-    .addUserOption(o => o.setName("usuario").setRequired(true)),
+    .setDescription("Fechar ponto de um usuário")
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("addtempo")
     .setDescription("Adicionar tempo")
-    .addUserOption(o => o.setName("usuario").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setRequired(true))
-    .addIntegerOption(o => o.setName("minutos").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("removertempo")
     .setDescription("Remover tempo")
-    .addUserOption(o => o.setName("usuario").setRequired(true))
-    .addIntegerOption(o => o.setName("horas").setRequired(true))
-    .addIntegerOption(o => o.setName("minutos").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("usuario").setDescription("Usuário").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("horas").setDescription("Horas").setRequired(true)
+    )
+    .addIntegerOption(o =>
+      o.setName("minutos").setDescription("Minutos").setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("hierarquiahp")
-    .setDescription("Enviar hierarquia completa")
+    .setDescription("Enviar hierarquia")
 ].map(c => c.toJSON());
 
 // 🚀 READY
@@ -291,7 +306,6 @@ client.on("interactionCreate", async interaction => {
       return interaction.reply({ content: "✅ Hierarquia enviada!", ephemeral: true });
     }
 
-    // ➕ ADD TEMPO
     if (interaction.commandName === "addtempo") {
       const user = interaction.options.getUser("usuario");
       const horas = interaction.options.getInteger("horas");
@@ -303,7 +317,6 @@ client.on("interactionCreate", async interaction => {
       return interaction.reply(`➕ ${horas}h ${minutos}m para <@${user.id}>`);
     }
 
-    // ➖ REMOVER TEMPO
     if (interaction.commandName === "removertempo") {
       const user = interaction.options.getUser("usuario");
       const horas = interaction.options.getInteger("horas");
