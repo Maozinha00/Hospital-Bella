@@ -61,7 +61,8 @@ const format = ms => {
 const HIERARQUIA_PAINEL = [
   { id: "1477683902121509018", nome: "Diretor" },
   { id: "1477683902121509017", nome: "Vice Diretor" },
-  { id: "1477683902121509016", nome: "Supervisor" }
+  { id: "1477683902121509016", nome: "Supervisor" },
+  { id: "1477683902121509015", nome: "Coodernador" },
 ];
 
 function getBossList(guild) {
