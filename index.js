@@ -1,6 +1,6 @@
 import "dotenv/config";
 import express from "express";
-import mongoose from "mongoose";
+import fs from "fs";
 import {
   Client,
   GatewayIntentBits,
@@ -16,18 +16,6 @@ import {
 /* ================= WEB ================= */
 const app = express();
 app.get("/", (_, res) => res.send("🔥 Bot online"));
-
-app.get("/ranking", async (_, res) => {
-  const data = await PontoDB.find().sort({ total: -1 }).limit(20);
-
-  let html = "<h1>🏥 Ranking Hospital</h1>";
-  data.forEach(u => {
-    html += `<p>${u.userId} - ${format(u.total)}</p>`;
-  });
-
-  res.send(html);
-});
-
 app.listen(process.env.PORT || 3000);
 
 /* ================= ENV ================= */
@@ -35,20 +23,36 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-/* ================= DB ================= */
-mongoose.connect(process.env.MONGO_URI);
+/* ================= FILES ================= */
+const pontosFile = "./pontos.json";
+const rankingFile = "./ranking.json";
+const configFile = "./config.json";
 
-const schema = new mongoose.Schema({
-  userId: String,
-  inicio: Number,
-  total: { type: Number, default: 0 },
-  ativo: Boolean
-});
+const read = (f) => JSON.parse(fs.readFileSync(f));
+const write = (f, d) => fs.writeFileSync(f, JSON.stringify(d, null, 2));
 
-const PontoDB = mongoose.model("pontos", schema);
+let pontos = read(pontosFile);
+let ranking = read(rankingFile);
+let config = read(configFile);
 
 /* ================= CONFIG ================= */
 const STAFF_ROLE = "1490431614055088128";
+
+/* ================= HIERARQUIA ================= */
+const HIERARQUIA = [
+  { role: "1477683902121509018", nome: "👑 Diretor" },
+  { role: "1477683902121509017", nome: "🧠 Vice Diretor" },
+  { role: "1477683902121509016", nome: "🛡️ Supervisor" },
+  { role: "1477683902121509015", nome: "📋 Coordenador" },
+  { role: "1477683902121509014", nome: "👨‍⚕️ Médico" }
+];
+
+function getCargo(member) {
+  for (const h of HIERARQUIA) {
+    if (member.roles.cache.has(h.role)) return h.nome;
+  }
+  return "👤 Funcionário";
+}
 
 /* ================= CLIENT ================= */
 const client = new Client({
@@ -75,7 +79,6 @@ function row() {
       .setCustomId("iniciar")
       .setLabel("🟢 Iniciar")
       .setStyle(ButtonStyle.Success),
-
     new ButtonBuilder()
       .setCustomId("finalizar")
       .setLabel("🔴 Finalizar")
@@ -88,9 +91,7 @@ const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel")
-    .addChannelOption(o =>
-      o.setName("canal").setRequired(true)
-    ),
+    .addChannelOption(o => o.setName("canal").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
@@ -105,51 +106,62 @@ const commands = [
 ].map(c => c.toJSON());
 
 /* ================= READY ================= */
-let painel = null;
-let msgId = null;
-
 client.once("ready", async () => {
-  console.log(`🔥 Online: ${client.user.tag}`);
+  console.log(`🔥 ${client.user.tag}`);
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
 
-  setInterval(updatePanel, 3000);
+  setInterval(updatePanel, 5000);
 });
 
 /* ================= PAINEL ================= */
 async function updatePanel() {
-  if (!painel || !msgId) return;
+  if (!config.painel || !config.msgId) return;
 
-  const channel = await client.channels.fetch(painel);
-  const msg = await channel.messages.fetch(msgId);
+  try {
+    const channel = await client.channels.fetch(config.painel);
+    const msg = await channel.messages.fetch(config.msgId);
 
-  const ativos = await PontoDB.find({ ativo: true });
+    let list = "";
 
-  let list = "";
+    for (const id in pontos) {
+      try {
+        const member = await client.guilds.cache
+          .get(GUILD_ID)
+          .members.fetch(id);
 
-  ativos.forEach(p => {
-    const tempo = Date.now() - p.inicio;
-    list += `<@${p.userId}> • ${format(tempo)}\n`;
-  });
+        const cargo = getCargo(member);
+        const tempo = Date.now() - pontos[id].inicio;
 
-  if (!list) list = "Ninguém em serviço";
+        list += `${cargo} <@${id}> • ${format(tempo)}\n`;
+      } catch {
+        list += `👤 <@${id}> • erro\n`;
+      }
+    }
 
-  const embed = new EmbedBuilder()
-    .setColor("#0f172a")
-    .setDescription(`🏥 Hospital
+    if (!list) list = "Ninguém em serviço";
+
+    const embed = new EmbedBuilder()
+      .setColor("#0f172a")
+      .setDescription(`🏥 Hospital
 
 👨‍⚕️ EM SERVIÇO:
 ${list}
 
-📊 Ativos: ${ativos.length}`);
+📊 Ativos: ${Object.keys(pontos).length}`);
 
-  await msg.edit({
-    embeds: [embed],
-    components: [row()]
-  });
+    await msg.edit({
+      embeds: [embed],
+      components: [row()]
+    });
+
+  } catch {
+    config = {};
+    write(configFile, config);
+  }
 }
 
 /* ================= INTERAÇÕES ================= */
@@ -161,31 +173,27 @@ client.on("interactionCreate", async interaction => {
     const id = interaction.user.id;
 
     if (interaction.customId === "iniciar") {
-      const existe = await PontoDB.findOne({ userId: id, ativo: true });
-
-      if (existe)
+      if (pontos[id])
         return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
 
-      await PontoDB.create({
-        userId: id,
-        inicio: Date.now(),
-        ativo: true
-      });
+      pontos[id] = { inicio: Date.now() };
+      write(pontosFile, pontos);
 
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
     if (interaction.customId === "finalizar") {
-      const p = await PontoDB.findOne({ userId: id, ativo: true });
-
-      if (!p)
+      if (!pontos[id])
         return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
 
-      const tempo = Date.now() - p.inicio;
+      const tempo = Date.now() - pontos[id].inicio;
 
-      p.total += tempo;
-      p.ativo = false;
-      await p.save();
+      ranking[id] = (ranking[id] || 0) + tempo;
+
+      delete pontos[id];
+
+      write(pontosFile, pontos);
+      write(rankingFile, ranking);
 
       return interaction.reply({
         content: `🔴 Finalizado • ${format(tempo)}`,
@@ -196,6 +204,7 @@ client.on("interactionCreate", async interaction => {
 
   /* COMANDOS */
   if (interaction.isChatInputCommand()) {
+
     if (interaction.commandName === "painelhp") {
       if (!isStaff(interaction.member))
         return interaction.reply("❌ Sem permissão");
@@ -207,34 +216,45 @@ client.on("interactionCreate", async interaction => {
         components: [row()]
       });
 
-      painel = canal.id;
-      msgId = msg.id;
+      config = { painel: canal.id, msgId: msg.id };
+      write(configFile, config);
 
       return interaction.reply("✅ Painel criado");
     }
 
     if (interaction.commandName === "rankinghp") {
-      const top = await PontoDB.find().sort({ total: -1 }).limit(10);
+      let arr = Object.entries(ranking)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
 
       let txt = "";
 
-      top.forEach((u, i) => {
-        txt += `#${i + 1} <@${u.userId}> • ${format(u.total)}\n`;
-      });
+      for (let i = 0; i < arr.length; i++) {
+        try {
+          const member = await interaction.guild.members.fetch(arr[i][0]);
+          const cargo = getCargo(member);
+
+          txt += `#${i + 1} ${cargo} <@${arr[i][0]}> • ${format(arr[i][1])}\n`;
+        } catch {
+          txt += `#${i + 1} 👤 <@${arr[i][0]}> • ${format(arr[i][1])}\n`;
+        }
+      }
 
       return interaction.reply({
         embeds: [
           new EmbedBuilder()
             .setColor("#22c55e")
-            .setTitle("🏆 Ranking")
+            .setTitle("🏆 Ranking Hospital")
             .setDescription(txt || "Sem dados")
         ]
       });
     }
 
     if (interaction.commandName === "addtempo") {
-      if (!isStaff(interaction.member))
-        return interaction.reply("❌ Sem permissão");
+      const cargo = getCargo(interaction.member);
+
+      if (!cargo.includes("Diretor"))
+        return interaction.reply("❌ Apenas Diretor pode usar isso");
 
       const user = interaction.options.getUser("usuario");
       const h = interaction.options.getInteger("horas");
@@ -242,14 +262,8 @@ client.on("interactionCreate", async interaction => {
 
       const tempo = (h * 60 + m) * 60000;
 
-      let db = await PontoDB.findOne({ userId: user.id });
-
-      if (!db) {
-        db = await PontoDB.create({ userId: user.id, total: tempo });
-      } else {
-        db.total += tempo;
-        await db.save();
-      }
+      ranking[user.id] = (ranking[user.id] || 0) + tempo;
+      write(rankingFile, ranking);
 
       return interaction.reply("✅ Tempo adicionado");
     }
