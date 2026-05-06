@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import mongoose from "mongoose";
 import {
   Client,
   GatewayIntentBits,
@@ -12,85 +13,62 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-/* =========================
-   🌐 KEEP ALIVE
-========================= */
+/* ================= WEB ================= */
 const app = express();
-app.get("/", (_, res) => res.send("Bot online 🔥"));
+app.get("/", (_, res) => res.send("🔥 Bot online"));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🌐 Web online"));
+app.get("/ranking", async (_, res) => {
+  const data = await PontoDB.find().sort({ total: -1 }).limit(20);
 
-/* =========================
-   🔐 ENV
-========================= */
+  let html = "<h1>🏥 Ranking Hospital</h1>";
+  data.forEach(u => {
+    html += `<p>${u.userId} - ${format(u.total)}</p>`;
+  });
+
+  res.send(html);
+});
+
+app.listen(process.env.PORT || 3000);
+
+/* ================= ENV ================= */
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-/* =========================
-   🛡️ CONFIG
-========================= */
+/* ================= DB ================= */
+mongoose.connect(process.env.MONGO_URI);
+
+const schema = new mongoose.Schema({
+  userId: String,
+  inicio: Number,
+  total: { type: Number, default: 0 },
+  ativo: Boolean
+});
+
+const PontoDB = mongoose.model("pontos", schema);
+
+/* ================= CONFIG ================= */
 const STAFF_ROLE = "1490431614055088128";
 
-const EM_SERVICO = "1492553421973356795";
-const FORA_SERVICO = "1492553631642288160";
-
-/* =========================
-   🧠 SISTEMA
-========================= */
-let config = { painel: null, msgId: null };
-
-const pontos = new Map();
-const ranking = new Map();
-
-/* =========================
-   🚀 CLIENT
-========================= */
+/* ================= CLIENT ================= */
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-/* =========================
-   ⏱ FUNÇÕES
-========================= */
+/* ================= FUNÇÕES ================= */
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   return `${h}h ${m}m`;
 }
 
-function tempoRelativo(ms) {
-  const m = Math.floor(ms / 60000);
-  if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há um minuto";
-  return `há ${m} minutos`;
-}
-
 function isStaff(member) {
-  return member?.roles?.cache?.has(STAFF_ROLE);
+  return member.roles.cache.has(STAFF_ROLE);
 }
 
-/* =========================
-   👑 HIERARQUIA
-========================= */
-const HIERARQUIA = [
-  { id: "1477683902121509018", nome: "Diretor 1" },
-  { id: "1477683902121509018", nome: "Diretor 2" },
-  { id: "1477683902121509017", nome: "Vice Diretor" },
-  { id: "1477683902121509016", nome: "Supervisor" },
-  { id: "1477683902121509015", nome: "Coordenador 1" },
-  { id: "1477683902121509014", nome: "Coordenador 2" }
-];
-
-/* =========================
-   🔘 BOTÕES
-========================= */
+/* ================= BOTÕES ================= */
 function row() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -105,65 +83,31 @@ function row() {
   );
 }
 
-/* =========================
-   📌 COMMANDS
-========================= */
+/* ================= COMMANDS ================= */
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
-    .setDescription("Criar painel hospital")
+    .setDescription("Criar painel")
     .addChannelOption(o =>
-      o.setName("canal").setDescription("Canal").setRequired(true)
+      o.setName("canal").setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ranking de horas"),
-
-  new SlashCommandBuilder()
-    .setName("abrirponto")
-    .setDescription("Abrir ponto de alguém")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("fecharponto")
-    .setDescription("Fechar ponto de alguém")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
-    ),
+    .setDescription("Ver ranking"),
 
   new SlashCommandBuilder()
     .setName("addtempo")
-    .setDescription("Adicionar horas")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("removertempo")
-    .setDescription("Remover horas")
-    .addUserOption(o =>
-      o.setName("usuario").setDescription("Usuário").setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o.setName("horas").setDescription("Horas").setRequired(true)
-    )
-    .addIntegerOption(o =>
-      o.setName("minutos").setDescription("Minutos").setRequired(true)
-    )
+    .setDescription("Adicionar tempo")
+    .addUserOption(o => o.setName("usuario").setRequired(true))
+    .addIntegerOption(o => o.setName("horas").setRequired(true))
+    .addIntegerOption(o => o.setName("minutos").setRequired(true))
 ].map(c => c.toJSON());
 
-/* =========================
-   🔥 READY
-========================= */
+/* ================= READY ================= */
+let painel = null;
+let msgId = null;
+
 client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
@@ -172,48 +116,35 @@ client.once("ready", async () => {
     { body: commands }
   );
 
-  let updating = false;
-
-  setInterval(async () => {
-    if (updating) return;
-    updating = true;
-
-    try {
-      await updatePanel();
-    } catch (err) {
-      console.error("Erro updatePanel:", err);
-    } finally {
-      updating = false;
-    }
-  }, 3000);
+  setInterval(updatePanel, 3000);
 });
 
-/* =========================
-   🏥 PAINEL
-========================= */
+/* ================= PAINEL ================= */
 async function updatePanel() {
-  if (!config.painel || !config.msgId) return;
+  if (!painel || !msgId) return;
 
-  const channel = await client.channels.fetch(config.painel);
-  const msg = await channel.messages.fetch(config.msgId);
+  const channel = await client.channels.fetch(painel);
+  const msg = await channel.messages.fetch(msgId);
+
+  const ativos = await PontoDB.find({ ativo: true });
 
   let list = "";
 
-  for (const [id, data] of pontos) {
-    const time = Date.now() - data.inicio;
-    list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
-  }
+  ativos.forEach(p => {
+    const tempo = Date.now() - p.inicio;
+    list += `<@${p.userId}> • ${format(tempo)}\n`;
+  });
 
-  if (!list) list = "Nenhum médico em serviço";
+  if (!list) list = "Ninguém em serviço";
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
-    .setDescription(`🏥 Hospital Bella
+    .setDescription(`🏥 Hospital
 
 👨‍⚕️ EM SERVIÇO:
 ${list}
 
-📊 Médicos ativos: ${pontos.size}`);
+📊 Ativos: ${ativos.length}`);
 
   await msg.edit({
     embeds: [embed],
@@ -221,45 +152,109 @@ ${list}
   });
 }
 
-/* =========================
-   🎯 INTERAÇÕES
-========================= */
+/* ================= INTERAÇÕES ================= */
 client.on("interactionCreate", async interaction => {
   if (!interaction.member) return;
 
+  /* BOTÕES */
   if (interaction.isButton()) {
     const id = interaction.user.id;
 
     if (interaction.customId === "iniciar") {
-      if (pontos.has(id)) {
-        return interaction.reply({ content: "❌ Já ativo", ephemeral: true });
-      }
+      const existe = await PontoDB.findOne({ userId: id, ativo: true });
 
-      pontos.set(id, { inicio: Date.now() });
+      if (existe)
+        return interaction.reply({ content: "❌ Já em serviço", ephemeral: true });
+
+      await PontoDB.create({
+        userId: id,
+        inicio: Date.now(),
+        ativo: true
+      });
+
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
     if (interaction.customId === "finalizar") {
-      const p = pontos.get(id);
+      const p = await PontoDB.findOne({ userId: id, ativo: true });
 
-      if (!p) {
+      if (!p)
         return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
-      }
 
-      const time = Date.now() - p.inicio;
+      const tempo = Date.now() - p.inicio;
 
-      ranking.set(id, (ranking.get(id) || 0) + time);
-      pontos.delete(id);
+      p.total += tempo;
+      p.ativo = false;
+      await p.save();
 
       return interaction.reply({
-        content: `🔴 Finalizado • ${format(time)}`,
+        content: `🔴 Finalizado • ${format(tempo)}`,
         ephemeral: true
       });
     }
   }
+
+  /* COMANDOS */
+  if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === "painelhp") {
+      if (!isStaff(interaction.member))
+        return interaction.reply("❌ Sem permissão");
+
+      const canal = interaction.options.getChannel("canal");
+
+      const msg = await canal.send({
+        embeds: [new EmbedBuilder().setDescription("Carregando...")],
+        components: [row()]
+      });
+
+      painel = canal.id;
+      msgId = msg.id;
+
+      return interaction.reply("✅ Painel criado");
+    }
+
+    if (interaction.commandName === "rankinghp") {
+      const top = await PontoDB.find().sort({ total: -1 }).limit(10);
+
+      let txt = "";
+
+      top.forEach((u, i) => {
+        txt += `#${i + 1} <@${u.userId}> • ${format(u.total)}\n`;
+      });
+
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#22c55e")
+            .setTitle("🏆 Ranking")
+            .setDescription(txt || "Sem dados")
+        ]
+      });
+    }
+
+    if (interaction.commandName === "addtempo") {
+      if (!isStaff(interaction.member))
+        return interaction.reply("❌ Sem permissão");
+
+      const user = interaction.options.getUser("usuario");
+      const h = interaction.options.getInteger("horas");
+      const m = interaction.options.getInteger("minutos");
+
+      const tempo = (h * 60 + m) * 60000;
+
+      let db = await PontoDB.findOne({ userId: user.id });
+
+      if (!db) {
+        db = await PontoDB.create({ userId: user.id, total: tempo });
+      } else {
+        db.total += tempo;
+        await db.save();
+      }
+
+      return interaction.reply("✅ Tempo adicionado");
+    }
+  }
 });
 
-/* =========================
-   🔑 LOGIN
-========================= */
+/* ================= LOGIN ================= */
 client.login(TOKEN);
