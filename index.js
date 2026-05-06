@@ -17,7 +17,9 @@ import {
 ========================= */
 const app = express();
 app.get("/", (_, res) => res.send("Bot online 🔥"));
-app.listen(3000);
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("🌐 Web online"));
 
 /* =========================
    🔐 ENV
@@ -46,7 +48,10 @@ const ranking = new Map();
    🚀 CLIENT
 ========================= */
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -159,7 +164,7 @@ const commands = [
 /* =========================
    🔥 READY
 ========================= */
-client.once("clientReady", async () => {
+client.once("ready", async () => {
   console.log(`🔥 Online: ${client.user.tag}`);
 
   await rest.put(
@@ -203,27 +208,12 @@ async function updatePanel() {
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
-    .setDescription(`🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
+    .setDescription(`🏥 Hospital Bella
 
-👑 RESPONSÁVEL DO PLANTÃO
-${getBossList(channel.guild)}
-
-────────────────────────────
-👨‍⚕️ EQUIPE EM SERVIÇO
+👨‍⚕️ EM SERVIÇO:
 ${list}
 
-────────────────────────────
-📊 STATUS
-👥 Médicos ativos: ${pontos.size}
-🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
-
-────────────────────────────
-🚨 OBSERVAÇÕES
-• Sistema automático
-• Horas em tempo real
-• Use corretamente os botões
-
-🏥 Hospital Bella • Sistema Profissional`);
+📊 Médicos ativos: ${pontos.size}`);
 
   await msg.edit({
     embeds: [embed],
@@ -232,159 +222,20 @@ ${list}
 }
 
 /* =========================
-   👑 CHEFES
-========================= */
-function getBossList(guild) {
-  const usados = new Set();
-
-  return HIERARQUIA.map(r => {
-    const role = guild.roles.cache.get(r.id);
-
-    if (!role) return `👑 Nenhum • ${r.nome}`;
-
-    const member = role.members
-      .filter(m => !usados.has(m.id))
-      .first();
-
-    if (!member) return `👑 Nenhum • ${r.nome}`;
-
-    usados.add(member.id);
-    return `👑 <@${member.id}> • ${r.nome}`;
-  }).join("\n");
-}
-
-/* =========================
    🎯 INTERAÇÕES
 ========================= */
 client.on("interactionCreate", async interaction => {
   if (!interaction.member) return;
-  const guild = interaction.guild;
 
-  async function setStatus(userId, inService) {
-    const member = await guild.members.fetch(userId);
-
-    if (inService) {
-      await member.roles.add(EM_SERVICO).catch(() => {});
-      await member.roles.remove(FORA_SERVICO).catch(() => {});
-    } else {
-      await member.roles.add(FORA_SERVICO).catch(() => {});
-      await member.roles.remove(EM_SERVICO).catch(() => {});
-    }
-  }
-
-  /* ========= COMMANDS ========= */
-  if (interaction.isChatInputCommand()) {
-    if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: "❌ Sem permissão", ephemeral: true });
-    }
-
-    if (interaction.commandName === "painelhp") {
-      const canal = interaction.options.getChannel("canal");
-
-      config.painel = canal.id;
-
-      const msg = await canal.send({
-        embeds: [new EmbedBuilder().setDescription("🏥 Painel ativo").setColor("#0f172a")],
-        components: [row()]
-      });
-
-      config.msgId = msg.id;
-
-      return interaction.reply({ content: "✅ Painel criado!", ephemeral: true });
-    }
-
-    if (interaction.commandName === "rankinghp") {
-      const top = [...ranking.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([id, t], i) => `#${i + 1} <@${id}> • ${format(t)}`)
-        .join("\n");
-
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🏆 Ranking de Horas")
-            .setDescription(top || "Sem dados")
-            .setColor("#0f172a")
-        ]
-      });
-    }
-
-    if (interaction.commandName === "abrirponto") {
-      const user = interaction.options.getUser("usuario");
-
-      if (pontos.has(user.id)) {
-        return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
-      }
-
-      pontos.set(user.id, { inicio: Date.now() });
-      await setStatus(user.id, true);
-
-      return interaction.reply({ content: `🟢 Ponto aberto para <@${user.id}>` });
-    }
-
-    if (interaction.commandName === "fecharponto") {
-      const user = interaction.options.getUser("usuario");
-      const p = pontos.get(user.id);
-
-      if (!p) {
-        return interaction.reply({ content: "❌ Não está em serviço", ephemeral: true });
-      }
-
-      const time = Date.now() - p.inicio;
-
-      ranking.set(user.id, (ranking.get(user.id) || 0) + time);
-      pontos.delete(user.id);
-
-      await setStatus(user.id, false);
-
-      return interaction.reply({
-        content: `🔴 Ponto fechado para <@${user.id}> • ${format(time)}`
-      });
-    }
-
-    if (interaction.commandName === "addtempo") {
-      const user = interaction.options.getUser("usuario");
-      const horas = interaction.options.getInteger("horas");
-      const minutos = interaction.options.getInteger("minutos");
-
-      const ms = (horas * 60 + minutos) * 60000;
-
-      ranking.set(user.id, (ranking.get(user.id) || 0) + ms);
-
-      return interaction.reply({
-        content: `➕ Adicionado ${horas}h ${minutos}m para <@${user.id}>`
-      });
-    }
-
-    if (interaction.commandName === "removertempo") {
-      const user = interaction.options.getUser("usuario");
-      const horas = interaction.options.getInteger("horas");
-      const minutos = interaction.options.getInteger("minutos");
-
-      const ms = (horas * 60 + minutos) * 60000;
-
-      const atual = ranking.get(user.id) || 0;
-
-      ranking.set(user.id, Math.max(0, atual - ms));
-
-      return interaction.reply({
-        content: `➖ Removido ${horas}h ${minutos}m de <@${user.id}>`
-      });
-    }
-  }
-
-  /* ========= BOTÕES ========= */
   if (interaction.isButton()) {
     const id = interaction.user.id;
 
     if (interaction.customId === "iniciar") {
       if (pontos.has(id)) {
-        return interaction.reply({ content: "❌ Já está em serviço", ephemeral: true });
+        return interaction.reply({ content: "❌ Já ativo", ephemeral: true });
       }
 
       pontos.set(id, { inicio: Date.now() });
-      await setStatus(id, true);
-
       return interaction.reply({ content: "🟢 Iniciado!", ephemeral: true });
     }
 
@@ -392,15 +243,13 @@ client.on("interactionCreate", async interaction => {
       const p = pontos.get(id);
 
       if (!p) {
-        return interaction.reply({ content: "❌ Você não iniciou", ephemeral: true });
+        return interaction.reply({ content: "❌ Não iniciou", ephemeral: true });
       }
 
       const time = Date.now() - p.inicio;
 
       ranking.set(id, (ranking.get(id) || 0) + time);
       pontos.delete(id);
-
-      await setStatus(id, false);
 
       return interaction.reply({
         content: `🔴 Finalizado • ${format(time)}`,
