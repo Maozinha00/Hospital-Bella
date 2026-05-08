@@ -12,15 +12,15 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🌐 KEEP ALIVE
+// 🌐 WEB
 const app = express();
 
 app.get("/", (_, res) => {
-  res.send("Bot online 🔥");
+  res.send("🔥 Bot online");
 });
 
 app.listen(3000, () => {
-  console.log("🌐 Web online na porta 3000");
+  console.log("🌐 WEB ONLINE");
 });
 
 // 🔐 ENV
@@ -28,12 +28,23 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🛡️ STAFF ROLE
+// 🛡️ STAFF
 const STAFF_ROLE = "1490431614055088128";
 
 // 🏥 CARGOS
 const EM_SERVICO = "1492553421973356795";
 const FORA_SERVICO = "1492553631642288160";
+
+// 👑 HIERARQUIA
+const HIERARQUIA = [
+  { id: "1477683902121509018", nome: "Diretor 1" },
+  { id: "1477683902121509019", nome: "Diretor 2" },
+  { id: "1477683902121509020", nome: "Diretor 3" },
+  { id: "1477683902121509017", nome: "Vice Diretor" },
+  { id: "1477683902121509016", nome: "Supervisor" },
+  { id: "1477683902121509015", nome: "Coordenador 1" },
+  { id: "1477683902121509014", nome: "Coordenador 2" }
+];
 
 // 🧠 SISTEMA
 let config = {
@@ -52,7 +63,24 @@ const client = new Client({
 // 🔥 REST
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ⏱ FORMAT
+// 📌 COMMANDS
+const commands = [
+  new SlashCommandBuilder()
+    .setName("painelhp")
+    .setDescription("Criar painel hospital")
+    .addChannelOption(option =>
+      option
+        .setName("canal")
+        .setDescription("Canal")
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("rankinghp")
+    .setDescription("Ranking hospital")
+].map(command => command.toJSON());
+
+// ⏱️ FORMAT
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
@@ -69,18 +97,7 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 👑 HIERARQUIA
-const HIERARQUIA = [
-  { id: "1477683902121509018", nome: "Diretor 1" },
-  { id: "1477683902121509019", nome: "Diretor 2" },
-  { id: "1477683902121509020", nome: "Diretor 3" },
-  { id: "1477683902121509017", nome: "Vice Diretor" },
-  { id: "1477683902121509016", nome: "Supervisor" },
-  { id: "1477683902121509015", nome: "Coordenador 1" },
-  { id: "1477683902121509014", nome: "Coordenador 2" }
-];
-
-// 🛡️ VERIFICAÇÃO STAFF
+// 🛡️ STAFF CHECK
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
@@ -100,28 +117,12 @@ function row() {
   );
 }
 
-// 📌 COMMANDS
-const commands = [
-  new SlashCommandBuilder()
-    .setName("painelhp")
-    .setDescription("Criar painel hospital")
-    .addChannelOption(option =>
-      option
-        .setName("canal")
-        .setDescription("Canal")
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName("rankinghp")
-    .setDescription("Ranking")
-].map(command => command.toJSON());
-
-// 👑 FUNÇÃO CHEFES
+// 👑 CHEFES
 function getBossList(guild) {
   const usados = new Set();
 
   return HIERARQUIA.map(cargo => {
+
     const role = guild.roles.cache.get(cargo.id);
 
     if (!role) {
@@ -139,12 +140,15 @@ function getBossList(guild) {
     usados.add(member.id);
 
     return `👑 <@${member.id}> • ${cargo.nome}`;
+
   }).join("\n");
 }
 
-// 🏥 UPDATE PAINEL
+// 🏥 UPDATE PANEL
 async function updatePanel() {
+
   try {
+
     if (!config.painel || !config.msgId) return;
 
     const channel = await client.channels.fetch(config.painel);
@@ -158,9 +162,10 @@ async function updatePanel() {
     let list = "";
 
     for (const [id, data] of pontos) {
-      const time = Date.now() - data.inicio;
 
-      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(time)}\n`;
+      const tempo = Date.now() - data.inicio;
+
+      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(tempo)}\n`;
     }
 
     if (!list) {
@@ -172,27 +177,27 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
- SISTEMA DE PLANTÃO EM FUNCIONAMENTO
+SISTEMA DE PLANTÃO EM FUNCIONAMENTO
 
- RESPONSÁVEL DO PLANTÃO
+👑 RESPONSÁVEL DO PLANTÃO
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
- EQUIPE EM SERVIÇO
+👨‍⚕️ EQUIPE EM SERVIÇO
 ${list}
 
 ────────────────────────────
 
- STATUS
+📊 STATUS
 👥 Médicos ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
 ────────────────────────────
 
 🚨 OBSERVAÇÕES
-• Sistema automático de controle de plantão
-• Registro de horas em tempo real
+• Sistema automático de controle
+• Registro em tempo real
 • Ranking atualizado continuamente
 • Não deixe o ponto aberto
 
@@ -205,29 +210,33 @@ ${list}
     });
 
   } catch (err) {
-    console.log("❌ Erro updatePanel:", err.message);
+    console.log("❌ updatePanel:", err.message);
   }
 }
 
 // 🔥 READY
 client.once("clientReady", async () => {
-  console.log(`🔥 Online: ${client.user.tag}`);
+
+  console.log(`🔥 ONLINE: ${client.user.tag}`);
 
   try {
+
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
 
-    console.log("✅ Slash commands registradas");
+    console.log("✅ COMANDOS REGISTRADOS");
 
   } catch (err) {
-    console.log("❌ Erro slash:", err.message);
+
+    console.log("❌ SLASH:", err.message);
   }
 
   let updating = false;
 
   setInterval(async () => {
+
     if (updating) return;
 
     updating = true;
@@ -235,45 +244,54 @@ client.once("clientReady", async () => {
     try {
       await updatePanel();
     } catch (err) {
-      console.log("❌ Erro painel:", err.message);
+      console.log(err.message);
     }
 
     updating = false;
+
   }, 3000);
 });
 
-// 🎯 INTERAÇÕES
+// 🎯 INTERACTION
 client.on("interactionCreate", async interaction => {
+
   try {
 
     if (!interaction.guild || !interaction.member) return;
 
     const guild = interaction.guild;
 
-    // 🔄 ALTERAR STATUS
+    // 🔄 STATUS
     async function setStatus(userId, inService) {
+
       try {
+
         const member = await guild.members.fetch(userId);
 
         if (!member) return;
 
         if (inService) {
+
           await member.roles.add(EM_SERVICO).catch(() => {});
           await member.roles.remove(FORA_SERVICO).catch(() => {});
+
         } else {
+
           await member.roles.add(FORA_SERVICO).catch(() => {});
           await member.roles.remove(EM_SERVICO).catch(() => {});
         }
 
       } catch (err) {
-        console.log("❌ Erro setStatus:", err.message);
+
+        console.log("❌ setStatus:", err.message);
       }
     }
 
-    // 📌 SLASH COMMAND
+    // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
 
       if (!isStaff(interaction.member)) {
+
         return interaction.reply({
           content: "❌ Sem permissão",
           ephemeral: true
@@ -286,6 +304,7 @@ client.on("interactionCreate", async interaction => {
         const canal = interaction.options.getChannel("canal");
 
         if (!canal) {
+
           return interaction.reply({
             content: "❌ Canal inválido",
             ephemeral: true
@@ -297,7 +316,7 @@ client.on("interactionCreate", async interaction => {
         const msg = await canal.send({
           embeds: [
             new EmbedBuilder()
-              .setDescription("🏥 Painel ativo")
+              .setDescription("🏥 Painel iniciado")
               .setColor("#0f172a")
           ],
           components: [row()]
@@ -308,7 +327,7 @@ client.on("interactionCreate", async interaction => {
         await updatePanel();
 
         return interaction.reply({
-          content: "✅ Painel criado!",
+          content: "✅ Painel criado",
           ephemeral: true
         });
       }
@@ -318,7 +337,9 @@ client.on("interactionCreate", async interaction => {
 
         const top = [...ranking.entries()]
           .sort((a, b) => b[1] - a[1])
-          .map(([id, tempo]) => `👨‍⚕️ <@${id}> • ${format(tempo)}`)
+          .map(([id, tempo]) =>
+            `👨‍⚕️ <@${id}> • ${format(tempo)}`
+          )
           .join("\n");
 
         return interaction.reply({
@@ -341,6 +362,7 @@ client.on("interactionCreate", async interaction => {
       if (interaction.customId === "iniciar") {
 
         if (pontos.has(userId)) {
+
           return interaction.reply({
             content: "❌ Você já está em serviço",
             ephemeral: true
@@ -356,7 +378,7 @@ client.on("interactionCreate", async interaction => {
         await updatePanel();
 
         return interaction.reply({
-          content: "🟢 Plantão iniciado!",
+          content: "🟢 Plantão iniciado",
           ephemeral: true
         });
       }
@@ -367,17 +389,18 @@ client.on("interactionCreate", async interaction => {
         const ponto = pontos.get(userId);
 
         if (!ponto) {
+
           return interaction.reply({
-            content: "❌ Você não iniciou o plantão",
+            content: "❌ Você não iniciou",
             ephemeral: true
           });
         }
 
-        const time = Date.now() - ponto.inicio;
+        const tempo = Date.now() - ponto.inicio;
 
         ranking.set(
           userId,
-          (ranking.get(userId) || 0) + time
+          (ranking.get(userId) || 0) + tempo
         );
 
         pontos.delete(userId);
@@ -387,18 +410,19 @@ client.on("interactionCreate", async interaction => {
         await updatePanel();
 
         return interaction.reply({
-          content: `🔴 Plantão finalizado • ${format(time)}`,
+          content: `🔴 Plantão finalizado • ${format(tempo)}`,
           ephemeral: true
         });
       }
     }
 
   } catch (err) {
+
     console.log("❌ interactionCreate:", err.message);
   }
 });
 
 // 🚀 LOGIN
 client.login(TOKEN).catch(err => {
-  console.log("❌ Erro login:", err.message);
+  console.log("❌ LOGIN:", err.message);
 });
