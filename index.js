@@ -13,7 +13,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🌐 WEB ONLINE
+// 🌐 WEB
 const app = express();
 
 app.get("/", (_, res) => {
@@ -46,15 +46,23 @@ const FORA_SERVICO = "1492553631642288160";
 
 // 👑 HIERARQUIA
 const HIERARQUIA = [
+
+  // 👑 DIRETORES
   { id: "1477683902121509018", nome: "Diretor 1" },
   { id: "1477683902121509019", nome: "Diretor 2" },
   { id: "1477683902121509020", nome: "Diretor 3" },
-  { id: "1477683902121509017", nome: "Vice Diretor 1" },
-  { id: "1477683902121509018", nome: "Vice Diretor 2" },
-  { id: "1477683902121509016", nome: "Supervisor 1" },
-  { id: "1477683902121509017", nome: "Supervisor 2" },
-  { id: "1477683902121509015", nome: "Coordenador 1" },
-  { id: "1477683902121509014", nome: "Coordenador 2" }
+
+  // 🛡️ VICE DIRETORES
+  { id: "1477683902121509021", nome: "Vice Diretor 1" },
+  { id: "1477683902121509022", nome: "Vice Diretor 2" },
+
+  // ⚕️ SUPERVISORES
+  { id: "1477683902121509023", nome: "Supervisor 1" },
+  { id: "1477683902121509024", nome: "Supervisor 2" },
+
+  // 📋 COORDENADORES
+  { id: "1477683902121509025", nome: "Coordenador 1" },
+  { id: "1477683902121509026", nome: "Coordenador 2" }
 ];
 
 // 🧠 SISTEMA
@@ -100,6 +108,7 @@ const commands = [
 
 // 🧠 FORMATAR TEMPO
 function format(ms) {
+
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
 
@@ -107,6 +116,7 @@ function format(ms) {
 }
 
 function tempoRelativo(ms) {
+
   const m = Math.floor(ms / 60000);
 
   if (m < 1) return "há poucos segundos";
@@ -115,14 +125,16 @@ function tempoRelativo(ms) {
   return `há ${m} minutos`;
 }
 
-// 🛡️ STAFF CHECK
+// 🛡️ STAFF
 function isStaff(member) {
   return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
 // 🔘 BOTÕES
 function row() {
+
   return new ActionRowBuilder().addComponents(
+
     new ButtonBuilder()
       .setCustomId("iniciar")
       .setLabel("🟢 Iniciar")
@@ -138,29 +150,33 @@ function row() {
 // 👑 RESPONSÁVEIS
 function getBossList(guild) {
 
-  const usados = new Set();
+  let lista = "";
 
-  return HIERARQUIA.map(cargo => {
+  for (const cargo of HIERARQUIA) {
 
     const role = guild.roles.cache.get(cargo.id);
 
     if (!role) {
-      return `👑 Nenhum • ${cargo.nome}`;
+      lista += `❌ Cargo não encontrado • ${cargo.nome}\n`;
+      continue;
     }
 
-    const member = role.members
-      .filter(m => !usados.has(m.id))
-      .first();
+    // 👨‍⚕️ SOMENTE EM SERVIÇO
+    const membros = role.members.filter(member =>
+      member.roles.cache.has(EM_SERVICO)
+    );
 
-    if (!member) {
-      return `👑 Nenhum • ${cargo.nome}`;
+    if (membros.size === 0) {
+      lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
+      continue;
     }
 
-    usados.add(member.id);
+    membros.forEach(member => {
+      lista += `👑 <@${member.id}> • ${cargo.nome}\n`;
+    });
+  }
 
-    return `👑 <@${member.id}> • ${cargo.nome}`;
-
-  }).join("\n");
+  return lista || "Nenhum responsável em serviço";
 }
 
 // 💎 LOGS
@@ -184,7 +200,7 @@ async function sendLog(embed) {
   }
 }
 
-// 🔄 ALTERAR STATUS
+// 🔄 STATUS
 async function setStatus(guild, userId, inService) {
 
   try {
@@ -193,15 +209,32 @@ async function setStatus(guild, userId, inService) {
 
     if (!member) return;
 
+    // 🟢 ENTRAR EM SERVIÇO
     if (inService) {
 
-      await member.roles.add(EM_SERVICO).catch(() => {});
-      await member.roles.remove(FORA_SERVICO).catch(() => {});
+      if (!member.roles.cache.has(EM_SERVICO)) {
+        await member.roles.add(EM_SERVICO).catch(() => {});
+      }
 
-    } else {
+      if (member.roles.cache.has(FORA_SERVICO)) {
+        await member.roles.remove(FORA_SERVICO).catch(() => {});
+      }
 
-      await member.roles.add(FORA_SERVICO).catch(() => {});
-      await member.roles.remove(EM_SERVICO).catch(() => {});
+      console.log(`🟢 ${member.user.tag} entrou em serviço`);
+    }
+
+    // 🔴 SAIR DE SERVIÇO
+    else {
+
+      if (!member.roles.cache.has(FORA_SERVICO)) {
+        await member.roles.add(FORA_SERVICO).catch(() => {});
+      }
+
+      if (member.roles.cache.has(EM_SERVICO)) {
+        await member.roles.remove(EM_SERVICO).catch(() => {});
+      }
+
+      console.log(`🔴 ${member.user.tag} saiu de serviço`);
     }
 
   } catch (err) {
@@ -210,7 +243,7 @@ async function setStatus(guild, userId, inService) {
   }
 }
 
-// 🏥 ATUALIZAR PAINEL
+// 🏥 UPDATE PANEL
 async function updatePanel() {
 
   try {
@@ -219,7 +252,7 @@ async function updatePanel() {
 
     const channel = await client.channels.fetch(config.painel).catch(() => null);
 
-    if (!channel) return;
+    if (!channel || !channel.isTextBased()) return;
 
     const msg = await channel.messages.fetch(config.msgId).catch(() => null);
 
@@ -279,7 +312,7 @@ ${chefeInfo}
 
 ────────────────────────────
 
-👑 HIERARQUIA
+👑 HIERARQUIA EM SERVIÇO
 ${getBossList(channel.guild)}
 
 ────────────────────────────
@@ -313,7 +346,7 @@ ${status}
   }
 }
 
-// 🚨 VERIFICAR TEMPO
+// 🚨 TEMPO
 async function verificarTempo() {
 
   for (const [id, data] of pontos) {
@@ -355,7 +388,7 @@ async function verificarTempo() {
 }
 
 // 🔥 READY
-client.once("clientReady", async () => {
+client.once("ready", async () => {
 
   console.log(`🔥 ONLINE: ${client.user.tag}`);
 
@@ -388,7 +421,9 @@ client.once("clientReady", async () => {
 
     try {
       await updatePanel();
-    } catch {}
+    } catch (err) {
+      console.log(err);
+    }
 
   }, 30000);
 
@@ -397,7 +432,9 @@ client.once("clientReady", async () => {
 
     try {
       await verificarTempo();
-    } catch {}
+    } catch (err) {
+      console.log(err);
+    }
 
   }, 60000);
 });
@@ -556,7 +593,7 @@ client.on("interactionCreate", async interaction => {
 
   } catch (err) {
 
-    console.log("❌ interactionCreate:", err.message);
+    console.log("❌ interactionCreate:", err);
   }
 });
 
