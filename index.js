@@ -344,22 +344,6 @@ ${lista}
 
 ────────────────────────────
 
-📋 COMANDOS DISPONÍVEIS
-
-🟢 /addservico
-Adicionar usuário em serviço
-
-🔴 /retirarservico
-Retirar usuário de serviço
-
-🏆 /rankinghp
-Ver ranking hospital
-
-🏥 /painelhp
-Criar painel hospital
-
-────────────────────────────
-
 ⚠️ SISTEMA AUTOMÁTICO
 • Controle de plantão
 • Controle de tempo
