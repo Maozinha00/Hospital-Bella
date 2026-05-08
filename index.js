@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+
 import {
   Client,
   GatewayIntentBits,
@@ -12,7 +13,7 @@ import {
   SlashCommandBuilder
 } from "discord.js";
 
-// 🌐 WEB
+// 🌐 WEB ONLINE
 const app = express();
 
 app.get("/", (_, res) => {
@@ -28,10 +29,18 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 🛡️ STAFF
-const STAFF_ROLE = "1490431614055088128";
+if (!TOKEN) {
+  console.log("❌ TOKEN não encontrada");
+  process.exit(1);
+}
 
-// 🏥 CARGOS
+// ⚙️ CONFIG
+const TEMPO_MAXIMO = 7 * 60 * 60 * 1000;
+
+// 🛡️ CARGOS
+const STAFF_ROLE = "1490431614055088128";
+const CARGO_ADV = "1477683902041690350";
+
 const EM_SERVICO = "1492553421973356795";
 const FORA_SERVICO = "1492553631642288160";
 
@@ -49,6 +58,7 @@ const HIERARQUIA = [
 // 🧠 SISTEMA
 let config = {
   painel: null,
+  logs: null,
   msgId: null
 };
 
@@ -63,7 +73,7 @@ const client = new Client({
 // 🔥 REST
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// 📌 COMMANDS
+// 📌 COMANDOS
 const commands = [
   new SlashCommandBuilder()
     .setName("painelhp")
@@ -71,16 +81,22 @@ const commands = [
     .addChannelOption(option =>
       option
         .setName("canal")
-        .setDescription("Canal")
+        .setDescription("Canal do painel")
+        .setRequired(true)
+    )
+    .addChannelOption(option =>
+      option
+        .setName("logs")
+        .setDescription("Canal de logs")
         .setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName("rankinghp")
-    .setDescription("Ranking hospital")
+    .setDescription("Ver ranking hospital")
 ].map(command => command.toJSON());
 
-// ⏱️ FORMAT
+// 🧠 FORMATAR TEMPO
 function format(ms) {
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
@@ -92,7 +108,7 @@ function tempoRelativo(ms) {
   const m = Math.floor(ms / 60000);
 
   if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há um minuto";
+  if (m === 1) return "há 1 minuto";
 
   return `há ${m} minutos`;
 }
@@ -117,8 +133,9 @@ function row() {
   );
 }
 
-// 👑 CHEFES
+// 👑 RESPONSÁVEIS
 function getBossList(guild) {
+
   const usados = new Set();
 
   return HIERARQUIA.map(cargo => {
@@ -144,32 +161,108 @@ function getBossList(guild) {
   }).join("\n");
 }
 
-// 🏥 UPDATE PANEL
+// 💎 LOGS
+async function sendLog(embed) {
+
+  try {
+
+    if (!config.logs) return;
+
+    const canal = await client.channels.fetch(config.logs).catch(() => null);
+
+    if (!canal || !canal.isTextBased()) return;
+
+    await canal.send({
+      embeds: [embed]
+    });
+
+  } catch (err) {
+
+    console.log("❌ LOG:", err.message);
+  }
+}
+
+// 🔄 ALTERAR STATUS
+async function setStatus(guild, userId, inService) {
+
+  try {
+
+    const member = await guild.members.fetch(userId);
+
+    if (!member) return;
+
+    if (inService) {
+
+      await member.roles.add(EM_SERVICO).catch(() => {});
+      await member.roles.remove(FORA_SERVICO).catch(() => {});
+
+    } else {
+
+      await member.roles.add(FORA_SERVICO).catch(() => {});
+      await member.roles.remove(EM_SERVICO).catch(() => {});
+    }
+
+  } catch (err) {
+
+    console.log("❌ STATUS:", err.message);
+  }
+}
+
+// 🏥 ATUALIZAR PAINEL
 async function updatePanel() {
 
   try {
 
     if (!config.painel || !config.msgId) return;
 
-    const channel = await client.channels.fetch(config.painel);
+    const channel = await client.channels.fetch(config.painel).catch(() => null);
 
     if (!channel) return;
 
-    const msg = await channel.messages.fetch(config.msgId);
+    const msg = await channel.messages.fetch(config.msgId).catch(() => null);
 
     if (!msg) return;
 
-    let list = "";
+    let lista = "";
+    let chefe = null;
+    let maiorTempo = 0;
 
     for (const [id, data] of pontos) {
 
       const tempo = Date.now() - data.inicio;
 
-      list += `👨‍⚕️ <@${id}> • ${tempoRelativo(tempo)}\n`;
+      if (tempo > maiorTempo) {
+        maiorTempo = tempo;
+        chefe = id;
+      }
     }
 
-    if (!list) {
-      list = "Nenhum médico em serviço";
+    if (pontos.size === 0) {
+
+      lista = "Nenhum médico em serviço";
+
+    } else {
+
+      for (const [id, data] of pontos) {
+
+        const tempo = Date.now() - data.inicio;
+
+        lista += `👨‍⚕️ <@${id}> • ${tempoRelativo(tempo)}\n`;
+      }
+    }
+
+    let chefeInfo = "Nenhum";
+
+    if (chefe) {
+      chefeInfo = `<@${chefe}> • ${format(maiorTempo)}`;
+    }
+
+    let status = "🔴 CRÍTICO";
+
+    if (pontos.size >= 3) {
+      status = "🟢 NORMAL";
+    } else if (pontos.size >= 1) {
+      status = "🟡 BAIXO EFETIVO";
     }
 
     const embed = new EmbedBuilder()
@@ -177,15 +270,20 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-SISTEMA DE PLANTÃO EM FUNCIONAMENTO
+🏥 SISTEMA HOSPITALAR ATIVO
 
 👑 RESPONSÁVEL DO PLANTÃO
+${chefeInfo}
+
+────────────────────────────
+
+👑 HIERARQUIA
 ${getBossList(channel.guild)}
 
 ────────────────────────────
 
 👨‍⚕️ EQUIPE EM SERVIÇO
-${list}
+${lista}
 
 ────────────────────────────
 
@@ -193,16 +291,14 @@ ${list}
 👥 Médicos ativos: ${pontos.size}
 🕒 Atualizado: <t:${Math.floor(Date.now() / 1000)}:R>
 
+🚨 SITUAÇÃO
+${status}
+
 ────────────────────────────
 
-🚨 OBSERVAÇÕES
-• Sistema automático de controle
-• Registro em tempo real
-• Ranking atualizado continuamente
-• Não deixe o ponto aberto
-
 🏥 Hospital Bella • Sistema Profissional
-`);
+`)
+      .setTimestamp();
 
     await msg.edit({
       embeds: [embed],
@@ -210,7 +306,49 @@ ${list}
     });
 
   } catch (err) {
+
     console.log("❌ updatePanel:", err.message);
+  }
+}
+
+// 🚨 VERIFICAR TEMPO
+async function verificarTempo() {
+
+  for (const [id, data] of pontos) {
+
+    try {
+
+      const tempo = Date.now() - data.inicio;
+
+      if (tempo < TEMPO_MAXIMO) continue;
+
+      const guild = client.guilds.cache.first();
+
+      if (!guild) continue;
+
+      const membro = await guild.members.fetch(id).catch(() => null);
+
+      if (!membro) continue;
+
+      await membro.roles.add(CARGO_ADV).catch(() => {});
+
+      pontos.delete(id);
+
+      await setStatus(guild, id, false);
+
+      await updatePanel();
+
+      await sendLog(
+        new EmbedBuilder()
+          .setColor("#dc2626")
+          .setTitle("🚨 ADVERTÊNCIA AUTOMÁTICA")
+          .setDescription(`<@${id}> passou de 7h em serviço`)
+      );
+
+    } catch (err) {
+
+      console.log("❌ verificarTempo:", err.message);
+    }
   }
 }
 
@@ -221,10 +359,20 @@ client.once("clientReady", async () => {
 
   try {
 
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
+    if (CLIENT_ID && GUILD_ID) {
+
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+      );
+
+    } else {
+
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
+        { body: commands }
+      );
+    }
 
     console.log("✅ COMANDOS REGISTRADOS");
 
@@ -233,26 +381,26 @@ client.once("clientReady", async () => {
     console.log("❌ SLASH:", err.message);
   }
 
-  let updating = false;
-
+  // 🔄 UPDATE
   setInterval(async () => {
-
-    if (updating) return;
-
-    updating = true;
 
     try {
       await updatePanel();
-    } catch (err) {
-      console.log(err.message);
-    }
+    } catch {}
 
-    updating = false;
+  }, 30000);
 
-  }, 3000);
+  // 🚨 TEMPO
+  setInterval(async () => {
+
+    try {
+      await verificarTempo();
+    } catch {}
+
+  }, 60000);
 });
 
-// 🎯 INTERACTION
+// 🎯 INTERAÇÕES
 client.on("interactionCreate", async interaction => {
 
   try {
@@ -260,32 +408,6 @@ client.on("interactionCreate", async interaction => {
     if (!interaction.guild || !interaction.member) return;
 
     const guild = interaction.guild;
-
-    // 🔄 STATUS
-    async function setStatus(userId, inService) {
-
-      try {
-
-        const member = await guild.members.fetch(userId);
-
-        if (!member) return;
-
-        if (inService) {
-
-          await member.roles.add(EM_SERVICO).catch(() => {});
-          await member.roles.remove(FORA_SERVICO).catch(() => {});
-
-        } else {
-
-          await member.roles.add(FORA_SERVICO).catch(() => {});
-          await member.roles.remove(EM_SERVICO).catch(() => {});
-        }
-
-      } catch (err) {
-
-        console.log("❌ setStatus:", err.message);
-      }
-    }
 
     // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
@@ -298,12 +420,13 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      // 🏥 /painelhp
+      // 🏥 PAINEL
       if (interaction.commandName === "painelhp") {
 
         const canal = interaction.options.getChannel("canal");
+        const logs = interaction.options.getChannel("logs");
 
-        if (!canal) {
+        if (!canal || !logs) {
 
           return interaction.reply({
             content: "❌ Canal inválido",
@@ -312,12 +435,13 @@ client.on("interactionCreate", async interaction => {
         }
 
         config.painel = canal.id;
+        config.logs = logs.id;
 
         const msg = await canal.send({
           embeds: [
             new EmbedBuilder()
-              .setDescription("🏥 Painel iniciado")
               .setColor("#0f172a")
+              .setDescription("🏥 Painel hospital iniciado")
           ],
           components: [row()]
         });
@@ -332,7 +456,7 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      // 🏆 /rankinghp
+      // 🏆 RANKING
       if (interaction.commandName === "rankinghp") {
 
         const top = [...ranking.entries()]
@@ -373,9 +497,15 @@ client.on("interactionCreate", async interaction => {
           inicio: Date.now()
         });
 
-        await setStatus(userId, true);
+        await setStatus(guild, userId, true);
 
         await updatePanel();
+
+        await sendLog(
+          new EmbedBuilder()
+            .setColor("#22c55e")
+            .setDescription(`🟢 <@${userId}> iniciou serviço`)
+        );
 
         return interaction.reply({
           content: "🟢 Plantão iniciado",
@@ -391,7 +521,7 @@ client.on("interactionCreate", async interaction => {
         if (!ponto) {
 
           return interaction.reply({
-            content: "❌ Você não iniciou",
+            content: "❌ Você não iniciou serviço",
             ephemeral: true
           });
         }
@@ -405,9 +535,15 @@ client.on("interactionCreate", async interaction => {
 
         pontos.delete(userId);
 
-        await setStatus(userId, false);
+        await setStatus(guild, userId, false);
 
         await updatePanel();
+
+        await sendLog(
+          new EmbedBuilder()
+            .setColor("#ef4444")
+            .setDescription(`🔴 <@${userId}> finalizou serviço • ${format(tempo)}`)
+        );
 
         return interaction.reply({
           content: `🔴 Plantão finalizado • ${format(tempo)}`,
@@ -420,6 +556,15 @@ client.on("interactionCreate", async interaction => {
 
     console.log("❌ interactionCreate:", err.message);
   }
+});
+
+// 🛡️ ANTI-CRASH
+process.on("unhandledRejection", err => {
+  console.log("❌ unhandledRejection:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.log("❌ uncaughtException:", err);
 });
 
 // 🚀 LOGIN
