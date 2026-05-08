@@ -48,48 +48,21 @@ const FORA_SERVICO = "1492553631642288160";
 const HIERARQUIA = [
 
   // 👑 DIRETORES
-  {
-    cargoId: "1477683902121509018",
-    nome: "Diretor 1"
-  },
-  {
-    cargoId: "1477683902121509019",
-    nome: "Diretor 2"
-  },
-  {
-    cargoId: "1477683902121509020",
-    nome: "Diretor 3"
-  },
+  { id: "1477683902121509018", nome: "Diretor 1" },
+  { id: "1477683902121509019", nome: "Diretor 2" },
+  { id: "1477683902121509020", nome: "Diretor 3" },
 
   // 🛡️ VICE DIRETORES
-  {
-    cargoId: "1477683902121509021",
-    nome: "Vice Diretor 1"
-  },
-  {
-    cargoId: "1477683902121509022",
-    nome: "Vice Diretor 2"
-  },
+  { id: "1477683902121509021", nome: "Vice Diretor 1" },
+  { id: "1477683902121509022", nome: "Vice Diretor 2" },
 
   // ⚕️ SUPERVISORES
-  {
-    cargoId: "1477683902121509023",
-    nome: "Supervisor 1"
-  },
-  {
-    cargoId: "1477683902121509024",
-    nome: "Supervisor 2"
-  },
+  { id: "1477683902121509023", nome: "Supervisor 1" },
+  { id: "1477683902121509024", nome: "Supervisor 2" },
 
   // 📋 COORDENADORES
-  {
-    cargoId: "1477683902121509025",
-    nome: "Coordenador 1"
-  },
-  {
-    cargoId: "1477683902121509026",
-    nome: "Coordenador 2"
-  }
+  { id: "1477683902121509025", nome: "Coordenador 1" },
+  { id: "1477683902121509026", nome: "Coordenador 2" }
 ];
 
 // 🧠 SISTEMA
@@ -142,7 +115,7 @@ const commands = [
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuário")
+        .setDescription("Selecione o usuário")
         .setRequired(true)
     ),
 
@@ -153,7 +126,7 @@ const commands = [
     .addUserOption(option =>
       option
         .setName("usuario")
-        .setDescription("Usuário")
+        .setDescription("Selecione o usuário")
         .setRequired(true)
     )
 
@@ -170,22 +143,17 @@ function format(ms) {
 
 function tempoRelativo(ms) {
 
-  const minutos = Math.floor(ms / 60000);
+  const m = Math.floor(ms / 60000);
 
-  if (minutos < 1) {
-    return "há poucos segundos";
-  }
+  if (m < 1) return "há poucos segundos";
+  if (m === 1) return "há 1 minuto";
 
-  if (minutos === 1) {
-    return "há 1 minuto";
-  }
-
-  return `há ${minutos} minutos`;
+  return `há ${m} minutos`;
 }
 
 // 🛡️ STAFF
 function isStaff(member) {
-  return member.roles.cache.has(STAFF_ROLE);
+  return member?.roles?.cache?.has(STAFF_ROLE);
 }
 
 // 🔘 BOTÕES
@@ -212,34 +180,26 @@ function getBossList(guild) {
 
   for (const cargo of HIERARQUIA) {
 
-    const role = guild.roles.cache.get(cargo.cargoId);
+    const role = guild.roles.cache.get(cargo.id);
 
-    // ❌ CARGO NÃO EXISTE
     if (!role) {
-
       lista += `❌ Cargo não encontrado • ${cargo.nome}\n`;
-
       continue;
     }
 
-    // 👥 MEMBROS EM SERVIÇO
     const membros = role.members.filter(member =>
       member.roles.cache.has(EM_SERVICO)
     );
 
-    // ❌ NINGUÉM EM SERVIÇO
     if (membros.size === 0) {
-
       lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
-
       continue;
     }
 
-    // ✅ MOSTRAR TODOS
-    membros.forEach(member => {
-
-      lista += `👑 ${cargo.nome} • <@${member.id}>\n`;
-    });
+    // ✅ PEGA TODOS OS MEMBROS DO CARGO
+    for (const member of membros.values()) {
+      lista += `👑 <@${member.id}> • ${cargo.nome}\n`;
+    }
   }
 
   return lista || "Nenhum responsável em serviço";
@@ -280,6 +240,7 @@ async function setStatus(guild, userId, inService) {
 
       await member.roles.add(EM_SERVICO).catch(() => {});
       await member.roles.remove(FORA_SERVICO).catch(() => {});
+
     }
 
     // 🔴 RETIRAR
@@ -319,20 +280,16 @@ async function updatePanel() {
       const tempo = Date.now() - data.inicio;
 
       if (tempo > maiorTempo) {
-
         maiorTempo = tempo;
         chefe = id;
       }
     }
 
-    // ❌ NINGUÉM
     if (pontos.size === 0) {
 
       lista = "❌ Nenhum médico em serviço";
-    }
 
-    // ✅ LISTA
-    else {
+    } else {
 
       for (const [id, data] of pontos) {
 
@@ -345,26 +302,19 @@ async function updatePanel() {
     let chefeInfo = "Nenhum";
 
     if (chefe) {
-
       chefeInfo = `<@${chefe}> • ${format(maiorTempo)}`;
     }
 
     let status = "🔴 CRÍTICO";
 
     if (pontos.size >= 3) {
-
       status = "🟢 NORMAL";
-    }
-
-    else if (pontos.size >= 1) {
-
+    } else if (pontos.size >= 1) {
       status = "🟡 BAIXO EFETIVO";
     }
 
     const embed = new EmbedBuilder()
-
       .setColor("#0f172a")
-
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
@@ -396,7 +346,6 @@ ${lista}
 ────────────────────────────
 
 ⚠️ SISTEMA AUTOMÁTICO
-
 • Controle de plantão
 • Controle de tempo
 • Advertência automática
@@ -407,7 +356,6 @@ ${lista}
 
 🏥 Hospital Bella • Sistema Profissional
 `)
-
       .setTimestamp();
 
     await msg.edit({
@@ -440,10 +388,8 @@ async function verificarTempo() {
 
       if (!membro) continue;
 
-      // 🚨 ADV
       await membro.roles.add(CARGO_ADV).catch(() => {});
 
-      // 🔴 RETIRAR SERVIÇO
       pontos.delete(id);
 
       await setStatus(guild, id, false);
@@ -451,13 +397,9 @@ async function verificarTempo() {
       await updatePanel();
 
       await sendLog(
-
         new EmbedBuilder()
-
           .setColor("#dc2626")
-
           .setTitle("🚨 ADVERTÊNCIA AUTOMÁTICA")
-
           .setDescription(`
 👨‍⚕️ Usuário: <@${id}>
 ⏰ Motivo: Passou de 7h em serviço
@@ -479,18 +421,17 @@ client.once("ready", async () => {
 
   try {
 
-    if (!CLIENT_ID || !GUILD_ID) {
-
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands }
-      );
-    }
-
-    else {
+    if (CLIENT_ID && GUILD_ID) {
 
       await rest.put(
         Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+      );
+
+    } else {
+
+      await rest.put(
+        Routes.applicationCommands(client.user.id),
         { body: commands }
       );
     }
@@ -505,14 +446,22 @@ client.once("ready", async () => {
   // 🔄 UPDATE
   setInterval(async () => {
 
-    await updatePanel().catch(() => {});
+    try {
+      await updatePanel();
+    } catch (err) {
+      console.log(err);
+    }
 
   }, 30000);
 
   // 🚨 TEMPO
   setInterval(async () => {
 
-    await verificarTempo().catch(() => {});
+    try {
+      await verificarTempo();
+    } catch (err) {
+      console.log(err);
+    }
 
   }, 60000);
 });
@@ -555,20 +504,15 @@ client.on("interactionCreate", async interaction => {
         config.logs = logs.id;
 
         const msg = await canal.send({
-
           embeds: [
-
             new EmbedBuilder()
-
               .setColor("#0f172a")
-
               .setDescription(`
 🏥 PAINEL HOSPITALAR INICIADO
 
 Use os botões abaixo para entrar ou retirar de serviço.
 `)
           ],
-
           components: [row()]
         });
 
@@ -593,17 +537,152 @@ Use os botões abaixo para entrar ou retirar de serviço.
           .join("\n");
 
         return interaction.reply({
-
           embeds: [
-
             new EmbedBuilder()
-
               .setTitle("🏆 Ranking Hospital")
-
               .setColor("#0f172a")
-
               .setDescription(top || "❌ Sem dados registrados")
           ]
+        });
+      }
+
+      // 🟢 ADD SERVIÇO
+      if (interaction.commandName === "addservico") {
+
+        const usuario = interaction.options.getUser("usuario");
+
+        if (!usuario) {
+
+          return interaction.reply({
+            content: "❌ Usuário inválido",
+            ephemeral: true
+          });
+        }
+
+        if (pontos.has(usuario.id)) {
+
+          return interaction.reply({
+            content: "❌ Usuário já está em serviço",
+            ephemeral: true
+          });
+        }
+
+        pontos.set(usuario.id, {
+          inicio: Date.now()
+        });
+
+        await setStatus(guild, usuario.id, true);
+
+        await updatePanel();
+
+        return interaction.reply({
+          content: `✅ ${usuario} foi adicionado em serviço`,
+          ephemeral: true
+        });
+      }
+
+      // 🔴 RETIRAR SERVIÇO
+      if (interaction.commandName === "retirarservico") {
+
+        const usuario = interaction.options.getUser("usuario");
+
+        if (!usuario) {
+
+          return interaction.reply({
+            content: "❌ Usuário inválido",
+            ephemeral: true
+          });
+        }
+
+        const ponto = pontos.get(usuario.id);
+
+        if (!ponto) {
+
+          return interaction.reply({
+            content: "❌ Usuário não está em serviço",
+            ephemeral: true
+          });
+        }
+
+        const tempo = Date.now() - ponto.inicio;
+
+        ranking.set(
+          usuario.id,
+          (ranking.get(usuario.id) || 0) + tempo
+        );
+
+        pontos.delete(usuario.id);
+
+        await setStatus(guild, usuario.id, false);
+
+        await updatePanel();
+
+        return interaction.reply({
+          content: `✅ ${usuario} foi retirado de serviço`,
+          ephemeral: true
+        });
+      }
+    }
+
+    // 🔘 BOTÕES
+    if (interaction.isButton()) {
+
+      const userId = interaction.user.id;
+
+      // 🟢 ENTRAR
+      if (interaction.customId === "iniciar") {
+
+        if (pontos.has(userId)) {
+
+          return interaction.reply({
+            content: "❌ Você já está em serviço",
+            ephemeral: true
+          });
+        }
+
+        pontos.set(userId, {
+          inicio: Date.now()
+        });
+
+        await setStatus(guild, userId, true);
+
+        await updatePanel();
+
+        return interaction.reply({
+          content: "🟢 Você entrou em serviço",
+          ephemeral: true
+        });
+      }
+
+      // 🔴 RETIRAR
+      if (interaction.customId === "finalizar") {
+
+        const ponto = pontos.get(userId);
+
+        if (!ponto) {
+
+          return interaction.reply({
+            content: "❌ Você não está em serviço",
+            ephemeral: true
+          });
+        }
+
+        const tempo = Date.now() - ponto.inicio;
+
+        ranking.set(
+          userId,
+          (ranking.get(userId) || 0) + tempo
+        );
+
+        pontos.delete(userId);
+
+        await setStatus(guild, userId, false);
+
+        await updatePanel();
+
+        return interaction.reply({
+          content: `🔴 Você saiu de serviço • ${format(tempo)}`,
+          ephemeral: true
         });
       }
     }
