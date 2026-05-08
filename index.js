@@ -48,21 +48,28 @@ const FORA_SERVICO = "1492553631642288160";
 const HIERARQUIA = [
 
   // 👑 DIRETORES
-  { id: "1477683902121509018", nome: "Diretor 1" },
-  { id: "1477683902121509019", nome: "Diretor 2" },
-  { id: "1477683902121509020", nome: "Diretor 3" },
+  {
+    id: "1477683902121509018",
+    nome: "Diretores"
+  },
 
   // 🛡️ VICE DIRETORES
-  { id: "1477683902121509021", nome: "Vice Diretor 1" },
-  { id: "1477683902121509022", nome: "Vice Diretor 2" },
+  {
+    id: "1477683902121509017",
+    nome: "Vice Diretores"
+  },
 
   // ⚕️ SUPERVISORES
-  { id: "1477683902121509023", nome: "Supervisor 1" },
-  { id: "1477683902121509024", nome: "Supervisor 2" },
+  {
+    id: "1477683902121509016",
+    nome: "Supervisores"
+  },
 
   // 📋 COORDENADORES
-  { id: "1477683902121509025", nome: "Coordenador 1" },
-  { id: "1477683902121509026", nome: "Coordenador 2" }
+  {
+    id: "1477683902121509015",
+    nome: "Coordenadores"
+  }
 ];
 
 // 🧠 SISTEMA
@@ -176,7 +183,7 @@ function row() {
   );
 }
 
-// 👑 HIERARQUIA ARRUMADA
+// 👑 RESPONSÁVEIS
 async function getBossList(guild) {
 
   let lista = "";
@@ -192,21 +199,18 @@ async function getBossList(guild) {
         continue;
       }
 
-      // ✅ PEGA TODOS MEMBROS DO CARGO
       const membros = role.members.filter(member =>
         member.roles.cache.has(EM_SERVICO)
       );
 
-      // ❌ NINGUÉM
       if (membros.size === 0) {
         lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
         continue;
       }
 
-      // ✅ MOSTRA TODOS
       for (const member of membros.values()) {
 
-        lista += `👑 ${member.user.username} • ${cargo.nome}\n`;
+        lista += `👑 <@${member.id}> • ${cargo.nome}\n`;
       }
 
     } catch (err) {
@@ -454,7 +458,6 @@ client.once("ready", async () => {
     console.log("❌ SLASH:", err.message);
   }
 
-  // 🔄 UPDATE
   setInterval(async () => {
 
     try {
@@ -465,7 +468,6 @@ client.once("ready", async () => {
 
   }, 30000);
 
-  // 🚨 TEMPO
   setInterval(async () => {
 
     try {
