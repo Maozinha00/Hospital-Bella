@@ -77,7 +77,10 @@ const ranking = new Map();
 
 // 🚀 CLIENT
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
 });
 
 // 🔥 REST
@@ -180,25 +183,30 @@ function getBossList(guild) {
 
   for (const cargo of HIERARQUIA) {
 
+    // pega cargo
     const role = guild.roles.cache.get(cargo.id);
 
+    // cargo inexistente
     if (!role) {
       lista += `❌ Cargo não encontrado • ${cargo.nome}\n`;
       continue;
     }
 
+    // pega SOMENTE quem está em serviço
     const membros = role.members.filter(member =>
-      member.roles.cache.has(EM_SERVICO)
+      pontos.has(member.id)
     );
 
+    // ninguém em serviço
     if (membros.size === 0) {
       lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
       continue;
     }
 
-    // ✅ PEGA TODOS OS MEMBROS DO CARGO
+    // mostra todos corretamente
     for (const member of membros.values()) {
-      lista += `👑 <@${member.id}> • ${cargo.nome}\n`;
+
+      lista += `👑 ${member.user.tag} • ${cargo.nome}\n`;
     }
   }
 
