@@ -176,37 +176,42 @@ function row() {
   );
 }
 
-// 👑 RESPONSÁVEIS
-function getBossList(guild) {
+// 👑 HIERARQUIA ARRUMADA
+async function getBossList(guild) {
 
   let lista = "";
 
   for (const cargo of HIERARQUIA) {
 
-    // pega cargo
-    const role = guild.roles.cache.get(cargo.id);
+    try {
 
-    // cargo inexistente
-    if (!role) {
-      lista += `❌ Cargo não encontrado • ${cargo.nome}\n`;
-      continue;
-    }
+      const role = await guild.roles.fetch(cargo.id).catch(() => null);
 
-    // pega SOMENTE quem está em serviço
-    const membros = role.members.filter(member =>
-      pontos.has(member.id)
-    );
+      if (!role) {
+        lista += `❌ Cargo não encontrado • ${cargo.nome}\n`;
+        continue;
+      }
 
-    // ninguém em serviço
-    if (membros.size === 0) {
-      lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
-      continue;
-    }
+      // ✅ PEGA TODOS MEMBROS DO CARGO
+      const membros = role.members.filter(member =>
+        member.roles.cache.has(EM_SERVICO)
+      );
 
-    // mostra todos corretamente
-    for (const member of membros.values()) {
+      // ❌ NINGUÉM
+      if (membros.size === 0) {
+        lista += `⚫ Nenhum em serviço • ${cargo.nome}\n`;
+        continue;
+      }
 
-      lista += `👑 ${member.user.tag} • ${cargo.nome}\n`;
+      // ✅ MOSTRA TODOS
+      for (const member of membros.values()) {
+
+        lista += `👑 ${member.user.username} • ${cargo.nome}\n`;
+      }
+
+    } catch (err) {
+
+      console.log(`❌ HIERARQUIA ${cargo.nome}:`, err.message);
     }
   }
 
@@ -239,20 +244,16 @@ async function setStatus(guild, userId, inService) {
 
   try {
 
-    const member = await guild.members.fetch(userId);
+    const member = await guild.members.fetch(userId).catch(() => null);
 
     if (!member) return;
 
-    // 🟢 ENTRAR
     if (inService) {
 
       await member.roles.add(EM_SERVICO).catch(() => {});
       await member.roles.remove(FORA_SERVICO).catch(() => {});
 
-    }
-
-    // 🔴 RETIRAR
-    else {
+    } else {
 
       await member.roles.add(FORA_SERVICO).catch(() => {});
       await member.roles.remove(EM_SERVICO).catch(() => {});
@@ -321,6 +322,8 @@ async function updatePanel() {
       status = "🟡 BAIXO EFETIVO";
     }
 
+    const hierarquiaTexto = await getBossList(channel.guild);
+
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setDescription(`
@@ -336,7 +339,7 @@ ${chefeInfo}
 ────────────────────────────
 
 👑 HIERARQUIA EM SERVIÇO
-${getBossList(channel.guild)}
+${hierarquiaTexto}
 
 ────────────────────────────
 
