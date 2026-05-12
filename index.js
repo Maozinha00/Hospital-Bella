@@ -283,7 +283,7 @@ async function updatePanel() {
       .setDescription(`
 🏥 ═════════════〔 HOSPITAL BELLA 〕═════════════
 
-🏥 SISTEMA HOSPITALAR ATIVO
+# 🏥 SISTEMA HOSPITALAR ATIVO
 
 ────────────────────────────
 
