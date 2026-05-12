@@ -46,26 +46,18 @@ const FORA_SERVICO = "1492553631642288160";
 
 // 👑 HIERARQUIA
 const HIERARQUIA = [
-
-  // 👑 DIRETORES
   {
     id: "1477683902121509018",
     nome: "Diretores"
   },
-
-  // 🛡️ VICE DIRETORES
   {
     id: "1477683902121509017",
     nome: "Vice Diretores"
   },
-
-  // ⚕️ SUPERVISORES
   {
     id: "1477683902121509016",
     nome: "Supervisores"
   },
-
-  // 📋 COORDENADORES
   {
     id: "1477683902121509015",
     nome: "Coordenadores"
@@ -95,8 +87,6 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 // 📌 COMANDOS
 const commands = [
-
-  // 🏥 PAINEL
   new SlashCommandBuilder()
     .setName("painelhp")
     .setDescription("Criar painel hospital")
@@ -113,12 +103,10 @@ const commands = [
         .setRequired(true)
     ),
 
-  // 🏆 RANKING
   new SlashCommandBuilder()
     .setName("rankinghp")
     .setDescription("Ver ranking hospital"),
 
-  // 🟢 ADD SERVIÇO
   new SlashCommandBuilder()
     .setName("addservico")
     .setDescription("Adicionar usuário em serviço")
@@ -129,7 +117,6 @@ const commands = [
         .setRequired(true)
     ),
 
-  // 🔴 RETIRAR SERVIÇO
   new SlashCommandBuilder()
     .setName("retirarservico")
     .setDescription("Retirar usuário de serviço")
@@ -139,26 +126,14 @@ const commands = [
         .setDescription("Selecione o usuário")
         .setRequired(true)
     )
-
 ].map(command => command.toJSON());
 
 // 🧠 FORMATAR TEMPO
 function format(ms) {
-
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
 
   return `${h}h ${m}m`;
-}
-
-function tempoRelativo(ms) {
-
-  const m = Math.floor(ms / 60000);
-
-  if (m < 1) return "há poucos segundos";
-  if (m === 1) return "há 1 minuto";
-
-  return `há ${m} minutos`;
 }
 
 // 🛡️ STAFF
@@ -168,9 +143,7 @@ function isStaff(member) {
 
 // 🔘 BOTÕES
 function row() {
-
   return new ActionRowBuilder().addComponents(
-
     new ButtonBuilder()
       .setCustomId("iniciar")
       .setLabel("🟢 Entrar em Serviço")
@@ -185,13 +158,10 @@ function row() {
 
 // 👑 RESPONSÁVEIS
 async function getBossList(guild) {
-
   let lista = "";
 
   for (const cargo of HIERARQUIA) {
-
     try {
-
       const role = await guild.roles.fetch(cargo.id).catch(() => null);
 
       if (!role) {
@@ -209,12 +179,10 @@ async function getBossList(guild) {
       }
 
       for (const member of membros.values()) {
-
         lista += `👑 <@${member.id}> • ${cargo.nome}\n`;
       }
 
     } catch (err) {
-
       console.log(`❌ HIERARQUIA ${cargo.nome}:`, err.message);
     }
   }
@@ -224,9 +192,7 @@ async function getBossList(guild) {
 
 // 💎 LOGS
 async function sendLog(embed) {
-
   try {
-
     if (!config.logs) return;
 
     const canal = await client.channels.fetch(config.logs).catch(() => null);
@@ -238,42 +204,33 @@ async function sendLog(embed) {
     });
 
   } catch (err) {
-
     console.log("❌ LOG:", err.message);
   }
 }
 
 // 🔄 STATUS
 async function setStatus(guild, userId, inService) {
-
   try {
-
     const member = await guild.members.fetch(userId).catch(() => null);
 
     if (!member) return;
 
     if (inService) {
-
       await member.roles.add(EM_SERVICO).catch(() => {});
       await member.roles.remove(FORA_SERVICO).catch(() => {});
-
     } else {
-
       await member.roles.add(FORA_SERVICO).catch(() => {});
       await member.roles.remove(EM_SERVICO).catch(() => {});
     }
 
   } catch (err) {
-
     console.log("❌ STATUS:", err.message);
   }
 }
 
 // 🏥 UPDATE PANEL
 async function updatePanel() {
-
   try {
-
     if (!config.painel || !config.msgId) return;
 
     const channel = await client.channels.fetch(config.painel).catch(() => null);
@@ -289,7 +246,6 @@ async function updatePanel() {
     let maiorTempo = 0;
 
     for (const [id, data] of pontos) {
-
       const tempo = Date.now() - data.inicio;
 
       if (tempo > maiorTempo) {
@@ -299,16 +255,10 @@ async function updatePanel() {
     }
 
     if (pontos.size === 0) {
-
       lista = "❌ Nenhum médico em serviço";
-
     } else {
-
-      for (const [id, data] of pontos) {
-
-        const tempo = Date.now() - data.inicio;
-
-        lista += `👨‍⚕️ <@${id}> • ${tempoRelativo(tempo)}\n`;
+      for (const [id] of pontos) {
+        lista += `👨‍⚕️ <@${id}>\n`;
       }
     }
 
@@ -379,18 +329,14 @@ ${lista}
     });
 
   } catch (err) {
-
     console.log("❌ updatePanel:", err.message);
   }
 }
 
 // 🚨 TEMPO
 async function verificarTempo() {
-
   for (const [id, data] of pontos) {
-
     try {
-
       const tempo = Date.now() - data.inicio;
 
       if (tempo < TEMPO_MAXIMO) continue;
@@ -423,7 +369,6 @@ async function verificarTempo() {
       );
 
     } catch (err) {
-
       console.log("❌ verificarTempo:", err.message);
     }
   }
@@ -431,20 +376,15 @@ async function verificarTempo() {
 
 // 🔥 READY
 client.once("ready", async () => {
-
   console.log(`🔥 ONLINE: ${client.user.tag}`);
 
   try {
-
     if (CLIENT_ID && GUILD_ID) {
-
       await rest.put(
         Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
         { body: commands }
       );
-
     } else {
-
       await rest.put(
         Routes.applicationCommands(client.user.id),
         { body: commands }
@@ -454,45 +394,36 @@ client.once("ready", async () => {
     console.log("✅ COMANDOS REGISTRADOS");
 
   } catch (err) {
-
     console.log("❌ SLASH:", err.message);
   }
 
   setInterval(async () => {
-
     try {
       await updatePanel();
     } catch (err) {
       console.log(err);
     }
-
   }, 30000);
 
   setInterval(async () => {
-
     try {
       await verificarTempo();
     } catch (err) {
       console.log(err);
     }
-
   }, 60000);
 });
 
 // 🎯 INTERAÇÕES
 client.on("interactionCreate", async interaction => {
-
   try {
-
     if (!interaction.guild || !interaction.member) return;
 
     const guild = interaction.guild;
 
     // 📌 COMANDOS
     if (interaction.isChatInputCommand()) {
-
       if (!isStaff(interaction.member)) {
-
         return interaction.reply({
           content: "❌ Sem permissão",
           ephemeral: true
@@ -501,12 +432,10 @@ client.on("interactionCreate", async interaction => {
 
       // 🏥 PAINEL
       if (interaction.commandName === "painelhp") {
-
         const canal = interaction.options.getChannel("canal");
         const logs = interaction.options.getChannel("logs");
 
         if (!canal || !logs) {
-
           return interaction.reply({
             content: "❌ Canal inválido",
             ephemeral: true
@@ -541,7 +470,6 @@ Use os botões abaixo para entrar ou retirar de serviço.
 
       // 🏆 RANKING
       if (interaction.commandName === "rankinghp") {
-
         const top = [...ranking.entries()]
           .sort((a, b) => b[1] - a[1])
           .map(([id, tempo], index) =>
@@ -561,11 +489,9 @@ Use os botões abaixo para entrar ou retirar de serviço.
 
       // 🟢 ADD SERVIÇO
       if (interaction.commandName === "addservico") {
-
         const usuario = interaction.options.getUser("usuario");
 
         if (!usuario) {
-
           return interaction.reply({
             content: "❌ Usuário inválido",
             ephemeral: true
@@ -573,7 +499,6 @@ Use os botões abaixo para entrar ou retirar de serviço.
         }
 
         if (pontos.has(usuario.id)) {
-
           return interaction.reply({
             content: "❌ Usuário já está em serviço",
             ephemeral: true
@@ -596,11 +521,9 @@ Use os botões abaixo para entrar ou retirar de serviço.
 
       // 🔴 RETIRAR SERVIÇO
       if (interaction.commandName === "retirarservico") {
-
         const usuario = interaction.options.getUser("usuario");
 
         if (!usuario) {
-
           return interaction.reply({
             content: "❌ Usuário inválido",
             ephemeral: true
@@ -610,7 +533,6 @@ Use os botões abaixo para entrar ou retirar de serviço.
         const ponto = pontos.get(usuario.id);
 
         if (!ponto) {
-
           return interaction.reply({
             content: "❌ Usuário não está em serviço",
             ephemeral: true
@@ -639,14 +561,11 @@ Use os botões abaixo para entrar ou retirar de serviço.
 
     // 🔘 BOTÕES
     if (interaction.isButton()) {
-
       const userId = interaction.user.id;
 
       // 🟢 ENTRAR
       if (interaction.customId === "iniciar") {
-
         if (pontos.has(userId)) {
-
           return interaction.reply({
             content: "❌ Você já está em serviço",
             ephemeral: true
@@ -669,11 +588,9 @@ Use os botões abaixo para entrar ou retirar de serviço.
 
       // 🔴 RETIRAR
       if (interaction.customId === "finalizar") {
-
         const ponto = pontos.get(userId);
 
         if (!ponto) {
-
           return interaction.reply({
             content: "❌ Você não está em serviço",
             ephemeral: true
@@ -701,7 +618,6 @@ Use os botões abaixo para entrar ou retirar de serviço.
     }
 
   } catch (err) {
-
     console.log("❌ interactionCreate:", err);
   }
 });
