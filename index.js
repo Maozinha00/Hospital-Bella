@@ -39,7 +39,7 @@ const TEMPO_MAXIMO = 7 * 60 * 60 * 1000;
 
 // 🛡️ CARGOS
 const STAFF_ROLE = "1490431614055088128";
-const CARGO_ADV = "1477683902041690350";
+const CARGO_ADV = "1493257999538589868";
 
 const EM_SERVICO = "1492553421973356795";
 const FORA_SERVICO = "1492553631642288160";
@@ -287,17 +287,17 @@ async function updatePanel() {
 
 ────────────────────────────
 
-👑 RESPONSÁVEL DO PLANTÃO
+** 👑 RESPONSÁVEL DO PLANTÃO **
 ${chefeInfo}
 
 ────────────────────────────
 
-👑 HIERARQUIA EM SERVIÇO
+** 👑 HIERARQUIA EM SERVIÇO **
 ${hierarquiaTexto}
 
 ────────────────────────────
 
-👨‍⚕️ EQUIPE EM SERVIÇO
+** 👨‍⚕️ EQUIPE EM SERVIÇO **
 ${lista}
 
 ────────────────────────────
@@ -310,16 +310,13 @@ ${lista}
 
 ────────────────────────────
 
-⚠️ SISTEMA AUTOMÁTICO
+** ⚠️ SISTEMA AUTOMÁTICO 
 • Controle de plantão
 • Controle de tempo
-• Advertência automática
-• Logs automáticos
-• Atualização em tempo real
-
+• Advertência automática **
 ────────────────────────────
 
-🏥 Hospital Bella • Sistema Profissional
+# 🏥 Hospital Bella • Sistema Profissional
 `)
       .setTimestamp();
 
